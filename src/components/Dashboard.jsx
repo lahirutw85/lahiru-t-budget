@@ -168,26 +168,22 @@ const Dashboard = () => {
     const loadAll = async () => {
       // 1. Expenses
       const expData = await fetchExpenses();
-      if (expData.length > 0) {
-        const hydrated = expData.map(exp => ({ ...exp, icon: getIconForCategory(exp.category) }));
-        setExpenses(hydrated);
-        const uniqueYears = Array.from(new Set(hydrated.map(e => e.date?.split('-')[0]).filter(Boolean)));
-        const currentYear = new Date().getFullYear().toString();
-        if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
-        setYears(uniqueYears.sort((a, b) => b - a));
-      }
+      const hydratedExp = (expData || []).map(exp => ({ ...exp, icon: getIconForCategory(exp.category) }));
+      setExpenses(hydratedExp);
+      const uniqueYears = Array.from(new Set(hydratedExp.map(e => e.date?.split('-')[0]).filter(Boolean)));
+      const currentYear = new Date().getFullYear().toString();
+      if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
+      setYears(uniqueYears.sort((a, b) => b - a));
 
       // 2. Incomes
       const incData = await fetchIncomes();
-      if (incData.length > 0) {
-        const hydrated = incData.map(inc => ({ ...inc, icon: getIconForCategory(inc.category) }));
-        setIncomes(hydrated);
-      }
+      const hydratedInc = (incData || []).map(inc => ({ ...inc, icon: getIconForCategory(inc.category) }));
+      setIncomes(hydratedInc);
 
       // 3. Bank Accounts
       const bankData = await fetchBankAccounts();
-      if (bankData !== null && bankData.length > 0) {
-        setBankAccounts(bankData.map(b => {
+      if (bankData !== null) {
+        setBankAccounts((bankData || []).map(b => {
           if (b.accountType !== 'Credit Card') {
             return {
               ...b,
@@ -675,8 +671,15 @@ const Dashboard = () => {
         notes: formNotes,
         icon: getIconForCategory(formCategory)
       });
-      setExpenses(budgetService.expenses.map(e => e.toJSON()));
-      setIncomes(budgetService.incomes.map(i => i.toJSON()));
+      const updatedExpenses = budgetService.expenses.map(e => e.toJSON());
+      const updatedIncomes = budgetService.incomes.map(i => i.toJSON());
+      setExpenses(updatedExpenses);
+      setIncomes(updatedIncomes);
+      if (formType === 'expense') {
+        syncExpensesToDatabase(updatedExpenses);
+      } else {
+        syncIncomesToDatabase(updatedIncomes);
+      }
     } catch (err) {
       alert(err.message);
       return;
@@ -742,7 +745,9 @@ const Dashboard = () => {
     const confirm = window.confirm("Are you sure you want to delete this expense?");
     if (confirm) {
       budgetService.deleteTransaction('expense', id);
-      setExpenses(budgetService.expenses.map(e => e.toJSON()));
+      const updated = budgetService.expenses.map(e => e.toJSON());
+      setExpenses(updated);
+      syncExpensesToDatabase(updated);
     }
   };
 
@@ -750,7 +755,9 @@ const Dashboard = () => {
     const confirm = window.confirm("Are you sure you want to delete this income?");
     if (confirm) {
       budgetService.deleteTransaction('income', id);
-      setIncomes(budgetService.incomes.map(i => i.toJSON()));
+      const updated = budgetService.incomes.map(i => i.toJSON());
+      setIncomes(updated);
+      syncIncomesToDatabase(updated);
     }
   };
 
