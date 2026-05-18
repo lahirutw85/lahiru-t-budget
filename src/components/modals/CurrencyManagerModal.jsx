@@ -90,7 +90,6 @@ export const CurrencyManagerModal = ({
                   if (cObj) {
                     const updated = [...currencies, { ...cObj, isDefault: false }];
                     setCurrencies(updated);
-                    localStorage.setItem('budget_currencies', JSON.stringify(updated));
                     
                     const nextAddable = ALL_CURRENCIES.filter(c => !updated.some(curr => curr.code === c.code));
                     if (nextAddable.length > 0) {
@@ -136,7 +135,6 @@ export const CurrencyManagerModal = ({
                               isDefault: curr.code === c.code
                             }));
                             setCurrencies(updated);
-                            localStorage.setItem('budget_currencies', JSON.stringify(updated));
                           }}
                           className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
                         >
@@ -151,7 +149,6 @@ export const CurrencyManagerModal = ({
                             }
                             const updated = currencies.filter(curr => curr.code !== c.code);
                             setCurrencies(updated);
-                            localStorage.setItem('budget_currencies', JSON.stringify(updated));
                             if (formCurrency === c.code) {
                               setFormCurrency(updated[0].code);
                             }

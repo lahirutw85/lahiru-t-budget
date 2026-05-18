@@ -94,7 +94,7 @@ import { ALL_CURRENCIES, EXCHANGE_RATES } from '../constants/currencies';
 import { SRI_LANKA_BANKS, UAE_BANKS, SRI_LANKA_BRANCHES, UAE_BRANCHES } from '../constants/banks';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
 import { convertCurrency } from '../utils/currencyUtils';
-import { fetchExpenses, fetchIncomes, fetchBankAccounts, syncExpenses, syncIncomes } from '../utils/dataSync';
+import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings } from '../utils/dataSync';
 
 
 
@@ -198,6 +198,20 @@ const Dashboard = () => {
           return b;
         }));
       }
+
+      // 4. Currencies
+      const currData = await fetchCurrencies();
+      if (currData !== null && currData.length > 0) {
+        setCurrencies(currData);
+      }
+
+      // 5. App Settings
+      const settingsData = await fetchSettings();
+      if (settingsData) {
+        if (Array.isArray(settingsData.customBanks)) setCustomBanks(settingsData.customBanks);
+        if (Array.isArray(settingsData.customAccountTypes)) setCustomAccountTypes(settingsData.customAccountTypes);
+        if (Array.isArray(settingsData.customBranches)) setCustomBranches(settingsData.customBranches);
+      }
     };
     loadAll();
   }, []);
@@ -254,12 +268,16 @@ const Dashboard = () => {
     const hasLKR = parsed.some(c => c.code === 'LKR');
     if (!hasLKR) {
       parsed.push({ code: 'LKR', name: 'Sri Lankan Rupee (LKR)', symbol: 'LKR' });
-      localStorage.setItem('budget_currencies', JSON.stringify(parsed));
     }
     return parsed;
   });
 
-  // Bank Accounts — persisted to localStorage
+  // Persist currencies whenever the list changes (Google Sheets cloud)
+  useEffect(() => {
+    syncCurrencies(currencies);
+  }, [currencies]);
+
+  // Bank Accounts — persisted to cloud
   // Structure of each account:
   //   { id, bankName, accountType, currency, balance, limit, remainingLimit,
   //     branch, country, accountNumbers[] }
@@ -284,9 +302,9 @@ const Dashboard = () => {
     });
   });
 
-  // Persist bank accounts whenever the list changes
+  // Persist bank accounts whenever the list changes (Google Sheets cloud)
   useEffect(() => {
-    localStorage.setItem('budget_bank_accounts', JSON.stringify(bankAccounts));
+    syncBankAccounts(bankAccounts);
   }, [bankAccounts]);
 
   // Bank Account MODAL state — open/close + which record is being edited
@@ -302,31 +320,30 @@ const Dashboard = () => {
   const [bankFormCountry, setBankFormCountry] = useState('Sri Lanka');
   const [bankFormBranch, setBankFormBranch] = useState('');
   
-  // Custom user-added items for the bank modal dropdowns
-  // These are saved to localStorage so they persist across sessions
+  // Custom user-added items for the bank modal dropdowns (Google Sheets cloud)
   const [customBanks, setCustomBanks] = useState(() => {
     const cached = localStorage.getItem('budget_custom_banks');
     return cached ? JSON.parse(cached) : [];
   });
-  useEffect(() => {
-    localStorage.setItem('budget_custom_banks', JSON.stringify(customBanks));
-  }, [customBanks]);
 
   const [customAccountTypes, setCustomAccountTypes] = useState(() => {
     const cached = localStorage.getItem('budget_custom_account_types');
     return cached ? JSON.parse(cached) : [];
   });
-  useEffect(() => {
-    localStorage.setItem('budget_custom_account_types', JSON.stringify(customAccountTypes));
-  }, [customAccountTypes]);
 
   const [customBranches, setCustomBranches] = useState(() => {
     const cached = localStorage.getItem('budget_custom_branches');
     return cached ? JSON.parse(cached) : [];
   });
+
+  // Persist all custom bank lists to settings sheet in cloud
   useEffect(() => {
-    localStorage.setItem('budget_custom_branches', JSON.stringify(customBranches));
-  }, [customBranches]);
+    syncSettings({
+      customBanks,
+      customAccountTypes,
+      customBranches
+    });
+  }, [customBanks, customAccountTypes, customBranches]);
 
   // Inline "Add custom" input visibility toggles + their text values
   const [showAddCustomBank,   setShowAddCustomBank]   = useState(false);
