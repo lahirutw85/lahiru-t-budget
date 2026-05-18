@@ -278,15 +278,23 @@ const Dashboard = () => {
   // Default includes AED as the primary currency
   const [currencies, setCurrencies] = useState(() => {
     const cached = localStorage.getItem('budget_currencies');
-    return cached ? JSON.parse(cached) : [
+    const parsed = cached ? JSON.parse(cached) : [
       { code: 'USD', name: 'United States Dollar (USD)', symbol: '$' },
       { code: 'GBP', name: 'British Pound (GBP)', symbol: '£' },
       { code: 'EUR', name: 'Euro (EUR)', symbol: '€' },
       { code: 'JPY', name: 'Japanese Yen (JPY)', symbol: '¥' },
       { code: 'CAD', name: 'Canadian Dollar (CAD)', symbol: 'C$' },
       { code: 'AUD', name: 'Australian Dollar (AUD)', symbol: 'A$' },
-      { code: 'AED', name: 'Default', symbol: 'AED', isDefault: true }
+      { code: 'AED', name: 'Default', symbol: 'AED', isDefault: true },
+      { code: 'LKR', name: 'Sri Lankan Rupee (LKR)', symbol: 'LKR' }
     ];
+    // Ensure LKR is always in the active list
+    const hasLKR = parsed.some(c => c.code === 'LKR');
+    if (!hasLKR) {
+      parsed.push({ code: 'LKR', name: 'Sri Lankan Rupee (LKR)', symbol: 'LKR' });
+      localStorage.setItem('budget_currencies', JSON.stringify(parsed));
+    }
+    return parsed;
   });
 
   // Bank Accounts — persisted to localStorage
@@ -1457,6 +1465,7 @@ const Dashboard = () => {
         customBranches={customBranches}
         setCustomBranches={setCustomBranches}
         currencies={currencies}
+        setIsCurrencyManagerOpen={setIsCurrencyManagerOpen}
       />
 
       <CurrencyManagerModal

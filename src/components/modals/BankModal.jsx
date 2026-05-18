@@ -60,6 +60,7 @@ export const BankModal = ({
   customBranches,
   setCustomBranches,
   currencies,
+  setIsCurrencyManagerOpen,
   SRI_LANKA_BANKS = DEFAULT_SRI_LANKA_BANKS,
   UAE_BANKS = DEFAULT_UAE_BANKS,
   SRI_LANKA_BRANCHES = DEFAULT_SRI_LANKA_BRANCHES,
@@ -259,16 +260,24 @@ export const BankModal = ({
           {/* 4. Currency Dropdown */}
           <div className="flex items-center gap-4">
             <label className="w-28 text-sm font-bold text-gray-700">Currency</label>
-            <div className="flex-1">
+            <div className="flex-1 flex gap-2 items-center">
               <select 
                 value={bankFormCurrency}
                 onChange={(e) => setBankFormCurrency(e.target.value)}
-                className="w-full bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700 font-medium cursor-pointer"
+                className="flex-1 bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700 font-medium cursor-pointer"
               >
                 {currencies.map(c => (
                   <option key={c.code} value={c.code}>{c.code}</option>
                 ))}
               </select>
+              <button 
+                type="button"
+                onClick={() => setIsCurrencyManagerOpen(true)}
+                className="p-2 rounded bg-white hover:bg-gray-100 border border-gray-300 transition-colors cursor-pointer flex-shrink-0"
+                title="Add / Manage Currencies"
+              >
+                <Plus className="w-4 h-4 text-[#374151]" />
+              </button>
             </div>
           </div>
 
