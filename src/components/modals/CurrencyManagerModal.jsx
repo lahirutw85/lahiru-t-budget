@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Check, Plus, MinusCircle } from 'lucide-react';
 
 const DEFAULT_ALL_CURRENCIES = [
@@ -23,6 +23,20 @@ export const CurrencyManagerModal = ({
   setFormCurrency,
   ALL_CURRENCIES = DEFAULT_ALL_CURRENCIES
 }) => {
+  useEffect(() => {
+    if (isCurrencyManagerOpen) {
+      const addable = ALL_CURRENCIES.filter(
+        c => !currencies.some(curr => curr.code === c.code)
+      );
+      if (addable.length > 0) {
+        const isCurrentActive = currencies.some(curr => curr.code === selectedCurrencyToAdd);
+        if (isCurrentActive) {
+          setSelectedCurrencyToAdd(addable[0].code);
+        }
+      }
+    }
+  }, [isCurrencyManagerOpen, currencies, selectedCurrencyToAdd, ALL_CURRENCIES, setSelectedCurrencyToAdd]);
+
   if (!isCurrencyManagerOpen) return null;
 
   return (
@@ -51,16 +65,22 @@ export const CurrencyManagerModal = ({
               <select
                 value={selectedCurrencyToAdd}
                 onChange={(e) => setSelectedCurrencyToAdd(e.target.value)}
-                className="flex-1 bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700 font-medium"
+                className="flex-1 bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700 font-medium cursor-pointer"
               >
-                {ALL_CURRENCIES.map(c => (
+                {ALL_CURRENCIES.filter(c => !currencies.some(curr => curr.code === c.code)).map(c => (
                   <option key={c.code} value={c.code}>
                     {c.code} - {c.name}
                   </option>
                 ))}
+                {ALL_CURRENCIES.filter(c => !currencies.some(curr => curr.code === c.code)).length === 0 && (
+                  <option value="">No more currencies to add</option>
+                )}
               </select>
               <button
                 onClick={() => {
+                  const addable = ALL_CURRENCIES.filter(c => !currencies.some(curr => curr.code === c.code));
+                  if (addable.length === 0) return;
+
                   const existing = currencies.find(c => c.code === selectedCurrencyToAdd);
                   if (existing) {
                     alert("Currency is already in your active list!");
@@ -71,10 +91,18 @@ export const CurrencyManagerModal = ({
                     const updated = [...currencies, { ...cObj, isDefault: false }];
                     setCurrencies(updated);
                     localStorage.setItem('budget_currencies', JSON.stringify(updated));
+                    
+                    const nextAddable = ALL_CURRENCIES.filter(c => !updated.some(curr => curr.code === c.code));
+                    if (nextAddable.length > 0) {
+                      setSelectedCurrencyToAdd(nextAddable[0].code);
+                    } else {
+                      setSelectedCurrencyToAdd('');
+                    }
                   }
                 }}
                 className="px-4 py-2 text-sm font-bold text-white rounded transition-opacity hover:opacity-90 flex items-center gap-1 shrink-0 cursor-pointer"
                 style={{ backgroundColor: '#0284C7' }}
+                disabled={ALL_CURRENCIES.filter(c => !currencies.some(curr => curr.code === c.code)).length === 0}
               >
                 <Plus className="w-4 h-4" /> Add
               </button>
