@@ -27,12 +27,12 @@ export const AccountsView = ({
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: COLORS.textPrimary }}>Bank details</h1>
+          <h1 className="text-3xl font-bold" style={{ color: COLORS.textPrimary }}>Bank Details</h1>
           <p className="text-sm mt-1" style={{ color: COLORS.textSecondary }}>
             manage your bank account here.
           </p>
         </div>
-        <button 
+        <button
           onClick={() => {
             setEditingBankAccountId(null);
             setBankFormName('');
@@ -65,11 +65,11 @@ export const AccountsView = ({
             const usedLimit = isCreditCard ? (account.limit - account.remainingLimit) : 0;
             const usedPercent = isCreditCard && account.limit > 0 ? Math.min(100, Math.max(0, (usedLimit / account.limit) * 100)) : 0;
             const remainingPercent = 100 - usedPercent;
-            
+
             return (
-              <div 
-                key={account.id} 
-                className="p-6 rounded-2xl border transition-all hover:scale-[1.01] flex flex-col justify-between" 
+              <div
+                key={account.id}
+                className="p-6 rounded-2xl border transition-all hover:scale-[1.01] flex flex-col justify-between"
                 style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border, minHeight: '260px' }}
               >
                 <div>
@@ -97,7 +97,7 @@ export const AccountsView = ({
                         </div>
                       </div>
                     </div>
-                    
+
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/5 uppercase" style={{ color: COLORS.textSecondary }}>
                       {account.currency}
                     </span>
@@ -118,11 +118,11 @@ export const AccountsView = ({
 
                         {/* Progress Bar */}
                         <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden mt-1.5">
-                          <div 
-                            className="h-full rounded-full transition-all duration-500" 
-                            style={{ 
-                              width: `${remainingPercent}%`, 
-                              backgroundColor: remainingPercent > 50 ? COLORS.green : remainingPercent > 20 ? COLORS.orange : COLORS.red 
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${remainingPercent}%`,
+                              backgroundColor: remainingPercent > 50 ? COLORS.green : remainingPercent > 20 ? COLORS.orange : COLORS.red
                             }}
                           />
                         </div>
@@ -163,7 +163,7 @@ export const AccountsView = ({
 
                 {/* Card Actions */}
                 <div className="flex justify-end gap-3 mt-6 pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.03)' }}>
-                  <button 
+                  <button
                     onClick={() => handleEditBankAccount(account)}
                     className="p-1.5 rounded hover:bg-white/5 transition-all text-xs font-bold flex items-center gap-1 cursor-pointer"
                     style={{ color: COLORS.skyBlue }}
@@ -172,7 +172,7 @@ export const AccountsView = ({
                     <Edit2 className="w-4 h-4" />
                     <span>Edit</span>
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleDeleteBankAccount(account.id)}
                     className="p-1.5 rounded hover:bg-white/5 transition-all text-xs font-bold flex items-center gap-1 cursor-pointer"
                     style={{ color: COLORS.red }}
