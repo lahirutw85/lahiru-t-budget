@@ -995,12 +995,27 @@ const Dashboard = () => {
     ? activeCurrenciesForPeriod
     : [currencyCode];
 
-  // Calculate balances by currency: cash balance (income - expense) + bank details account balances
+  // Helper to sum all-time CASH transactions by currency (excluding bank and credit card)
+  const sumAllTimeCashByCurrency = (items) => {
+    return items.reduce((acc, item) => {
+      const accType = item.account || 'Cash';
+      if (accType !== 'Bank Account' && accType !== 'Credit Card') {
+        const cur = item.currency || 'AED';
+        acc[cur] = (acc[cur] || 0) + (item.amount || 0);
+      }
+      return acc;
+    }, {});
+  };
+
+  const allTimeIncomesSumCash = sumAllTimeCashByCurrency(incomes);
+  const allTimeExpensesSumCash = sumAllTimeCashByCurrency(expenses);
+
+  // Calculate balances by currency: cash balance (all-time cash income - all-time cash expense) + bank details account balances
   const balancesByCurrency = activeCurrencies.reduce((acc, cur) => {
-    const inc = incomesSumByCurrency[cur] || 0;
-    const exp = expensesSumByCurrency[cur] || 0;
+    const cashInc = allTimeIncomesSumCash[cur] || 0;
+    const cashExp = allTimeExpensesSumCash[cur] || 0;
     const bankSum = bankBalancesSumByCurrency[cur] || 0;
-    acc[cur] = (inc - exp) + bankSum;
+    acc[cur] = (cashInc - cashExp) + bankSum;
     return acc;
   }, {});
 

@@ -146,7 +146,13 @@ export const DashboardView = ({
     const converted = convertCurrency(inc.amount, txCurrency, currencyCode);
     return sum + converted;
   }, 0);
-  const prevInHandValue = (prevTotalIncomeValue - prevTotalExpenditure) + bankBalancesSumDefault;
+  // Correctly compute current In Hand sum from balancesByCurrency converted to default currency
+  const currentInHand = Object.entries(balancesByCurrency).reduce((sum, [cur, bal]) => {
+    return sum + convertCurrency(bal, cur, currencyCode);
+  }, 0);
+
+  const currentNetCashFlow = totalIncomeValue - totalExpenditure;
+  const prevInHandValue = currentInHand - currentNetCashFlow;
 
   // Percentage changes compared to previous month
   let incomeChangePct = 0;
@@ -164,7 +170,6 @@ export const DashboardView = ({
   }
 
   let inHandChangePct = 0;
-  const currentInHand = (totalIncomeValue - totalExpenditure) + bankBalancesSumDefault;
   if (prevInHandValue !== 0) {
     inHandChangePct = Math.round(((currentInHand - prevInHandValue) / Math.abs(prevInHandValue)) * 100);
   } else if (currentInHand !== 0) {
