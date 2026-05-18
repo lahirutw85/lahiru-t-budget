@@ -84,6 +84,7 @@ import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
 import { CategoryManagerModal } from './modals/CategoryManagerModal';
+import { DatabaseConfigModal } from './modals/DatabaseConfigModal';
 
 // ================================================================
 // §2. EXTERNAL CONSTANTS & UTILITIES
@@ -124,6 +125,7 @@ const Dashboard = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [isDbConfigOpen, setIsDbConfigOpen] = useState(false);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -158,10 +160,14 @@ const Dashboard = () => {
   const [incomes,   setIncomes]   = useState([]);
   const [formType,  setFormType]  = useState('expense'); // 'expense' | 'income'
 
+  const getApiBase = () => {
+    return localStorage.getItem('budget_api_url') || 'http://localhost:5000/api';
+  };
+
   useEffect(() => {
     const fetchExpenses = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/expenses');
+        const res = await fetch(`${getApiBase()}/expenses`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
@@ -190,7 +196,7 @@ const Dashboard = () => {
 
     const fetchIncomes = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/incomes');
+        const res = await fetch(`${getApiBase()}/incomes`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
@@ -219,7 +225,7 @@ const Dashboard = () => {
   const syncExpensesToDatabase = async (updatedExpenses) => {
     localStorage.setItem('budget_expenses', JSON.stringify(updatedExpenses));
     try {
-      await fetch('http://localhost:5000/api/expenses', {
+      await fetch(`${getApiBase()}/expenses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expenses: updatedExpenses })
@@ -232,7 +238,7 @@ const Dashboard = () => {
   const syncIncomesToDatabase = async (updatedIncomes) => {
     localStorage.setItem('budget_incomes', JSON.stringify(updatedIncomes));
     try {
-      await fetch('http://localhost:5000/api/incomes', {
+      await fetch(`${getApiBase()}/incomes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incomes: updatedIncomes })
@@ -1235,6 +1241,17 @@ const Dashboard = () => {
                       <p className="text-sm font-bold truncate" style={{ color: COLORS.textPrimary }}>lahirut85</p>
                     </div>
                     <button 
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        setIsDbConfigOpen(true);
+                      }}
+                      className="w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg transition-colors hover:bg-sky-500/10 hover:text-[#4FD1F5] flex items-center gap-2 cursor-pointer mb-1"
+                      style={{ color: COLORS.textPrimary }}
+                    >
+                      <Settings className="w-4 h-4 text-sky-400" />
+                      Excel Sync Settings
+                    </button>
+                    <button 
                       onClick={handleLogout}
                       className="w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg transition-colors hover:bg-red-500/10 hover:text-red-400 flex items-center gap-2 cursor-pointer"
                       style={{ color: COLORS.textPrimary }}
@@ -1502,6 +1519,11 @@ const Dashboard = () => {
         handleStartAddSubCategory={handleStartAddSubCategory}
         AVAILABLE_ICONS={AVAILABLE_ICONS}
         Star={Star}
+      />
+
+      <DatabaseConfigModal
+        isDbConfigOpen={isDbConfigOpen}
+        setIsDbConfigOpen={setIsDbConfigOpen}
       />
     </div>
   );
