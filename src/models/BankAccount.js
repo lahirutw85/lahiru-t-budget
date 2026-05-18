@@ -6,6 +6,8 @@
 // managing multiple account numbers, and validating fields.
 // ================================================================
 
+import { convertCurrency } from '../utils/currencyUtils';
+
 export class BankAccount {
   /**
    * Creates a new BankAccount instance.
@@ -75,7 +77,10 @@ export class BankAccount {
         let txBankNameLower = tx.bankName.trim().toLowerCase();
 
         if (txBankNameLower.startsWith(expectedBase)) {
-          const amount = type === 'income' ? tx.amount : -tx.amount;
+          const txAmount = tx.currency && tx.currency !== this.currency
+            ? convertCurrency(tx.amount, tx.currency, this.currency)
+            : tx.amount;
+          const amount = type === 'income' ? txAmount : -txAmount;
           totalAdjust += amount;
 
           // Check if a specific account number was selected in tx.bankName

@@ -242,6 +242,14 @@ export const TransactionModal = ({
                             detailLabel += ` - Acc: ${acc.accountNumbers[0]}`;
                           }
                           setFormSelectedAccountDetails(detailLabel);
+                          if (acc.currency) {
+                            setFormCurrency(acc.currency);
+                          }
+                        } else if (matches.length > 1) {
+                          setFormSelectedAccountDetails('');
+                          if (matches[0].currency) {
+                            setFormCurrency(matches[0].currency);
+                          }
                         } else {
                           setFormSelectedAccountDetails('');
                         }
@@ -265,7 +273,24 @@ export const TransactionModal = ({
                     <div className="flex-1">
                       <select
                         value={formSelectedAccountDetails}
-                        onChange={(e) => setFormSelectedAccountDetails(e.target.value)}
+                        onChange={(e) => {
+                          setFormSelectedAccountDetails(e.target.value);
+                          const selectedVal = e.target.value;
+                          const matchedAcc = matchingDetails.find(acc => {
+                            let detailVal = acc.accountType;
+                            if (acc.branch) detailVal += ` - ${acc.branch}`;
+                            if (acc.accountType !== 'Credit Card' && acc.accountNumbers && acc.accountNumbers.length > 0) {
+                              return acc.accountNumbers.some(no => {
+                                let checkVal = `${detailVal} - Acc: ${no}`;
+                                return checkVal === selectedVal;
+                              });
+                            }
+                            return detailVal === selectedVal;
+                          });
+                          if (matchedAcc && matchedAcc.currency) {
+                            setFormCurrency(matchedAcc.currency);
+                          }
+                        }}
                         className="w-full bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700 font-medium"
                       >
                         <option value="">-- Select Details --</option>
