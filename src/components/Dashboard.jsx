@@ -446,6 +446,9 @@ const Dashboard = () => {
     sessionStorage.removeItem('isLoggedIn');
     setIsLoggedIn(false);
     setProfileDropdownOpen(false);
+    setLoginUsername('');
+    setLoginPassword('');
+    setLoginError('');
   };
 
   // Date/Period selectors — used to filter expenses & incomes by month/year
