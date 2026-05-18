@@ -84,7 +84,7 @@ import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
 import { CategoryManagerModal } from './modals/CategoryManagerModal';
-import { DatabaseConfigModal } from './modals/DatabaseConfigModal';
+
 
 // ================================================================
 // §2. EXTERNAL CONSTANTS & UTILITIES
@@ -125,7 +125,7 @@ const Dashboard = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const [isDbConfigOpen, setIsDbConfigOpen] = useState(false);
+
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -1248,17 +1248,7 @@ const Dashboard = () => {
                       <p className="text-xs font-semibold" style={{ color: COLORS.textSecondary }}>Signed in as</p>
                       <p className="text-sm font-bold truncate" style={{ color: COLORS.textPrimary }}>lahirut85</p>
                     </div>
-                    <button 
-                      onClick={() => {
-                        setProfileDropdownOpen(false);
-                        setIsDbConfigOpen(true);
-                      }}
-                      className="w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg transition-colors hover:bg-sky-500/10 hover:text-[#4FD1F5] flex items-center gap-2 cursor-pointer mb-1"
-                      style={{ color: COLORS.textPrimary }}
-                    >
-                      <Settings className="w-4 h-4 text-sky-400" />
-                      Excel Sync Settings
-                    </button>
+
                     <button 
                       onClick={handleLogout}
                       className="w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg transition-colors hover:bg-red-500/10 hover:text-red-400 flex items-center gap-2 cursor-pointer"
@@ -1530,10 +1520,7 @@ const Dashboard = () => {
         Star={Star}
       />
 
-      <DatabaseConfigModal
-        isDbConfigOpen={isDbConfigOpen}
-        setIsDbConfigOpen={setIsDbConfigOpen}
-      />
+
     </div>
   );
 };
