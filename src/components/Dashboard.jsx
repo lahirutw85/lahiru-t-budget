@@ -1,0 +1,1644 @@
+// ================================================================
+// Dashboard.jsx — Main Application Shell
+// ================================================================
+//
+// ARCHITECTURE OVERVIEW
+// ─────────────────────
+// This is the single-page React application for the Budget Master
+// personal finance tracker. All views (Dashboard, Expenses, Income,
+// Accounts, etc.) are rendered inside this one component.
+//
+// FILE STRUCTURE (inside this file)
+// ──────────────────────────────────
+//  1. IMPORTS           — React, Lucide icons, Recharts
+//  2. THEME CONSTANTS   — Dark/light color palettes (THEMES object)
+//  3. CURRENCY DATA     — All world currencies + exchange rates
+//  4. BANK DATA         — Sri Lanka & UAE bank / branch name lists
+//  5. CATEGORY DATA     — Expense & income categories with sub-categories
+//  6. HELPER FUNCTIONS  — convertCurrency, formatCurrency, etc.
+//  7. DASHBOARD COMPONENT
+//     a. STATE VARIABLES   — All useState hooks grouped by feature
+//     b. EFFECTS           — Data fetching, localStorage sync
+//     c. EVENT HANDLERS    — CRUD for expenses, incomes, bank accounts
+//     d. COMPUTED VALUES   — Derived totals, donut data, active currencies
+//     e. RENDER HELPERS    — Sub-render functions for multi-currency displays
+//     f. MAIN JSX RETURN   — Sidebar + main content area
+//        i.  Sidebar
+//        ii. Dashboard page
+//        iii.Expenses page
+//        iv. Income page
+//        v.  Accounts (Bank Details) page
+//        vi. Modals (Add Expense/Income, Bank, Currency Manager, etc.)
+//
+// RELATED EXTRACTED FILES (refactored constants & utils):
+//   src/constants/themes.js      — THEMES object (dark/light palettes)
+//   src/constants/currencies.js  — ALL_CURRENCIES + EXCHANGE_RATES
+//   src/constants/banks.js       — SRI_LANKA_BANKS, UAE_BANKS, branches
+//   src/constants/categories.js  — INCOME_CATEGORIES, AVAILABLE_ICONS
+//   src/utils/currencyUtils.js   — convertCurrency, formatCurrency, etc.
+//   src/utils/chartUtils.js      — buildDonutData, sumByCurrency, etc.
+//   src/utils/dataSync.js        — syncExpenses, syncIncomes, fetchExpenses
+//
+// NOTE: The constants above are still inlined here for a single-file
+//       build. To use the extracted files, replace the inline blocks
+//       with import statements from the paths above.
+// ================================================================
+
+import React, { useState, useEffect } from 'react';
+import { BudgetService } from '../models/BudgetService';
+import {
+  // Layout & Navigation icons
+  Menu, X, ChevronDown, ChevronRight,
+
+  // Action icons
+  Plus, Save, Paperclip, Check, Edit2, Trash2, MinusCircle, Settings,
+
+  // Finance / Category icons
+  Wallet, CreditCard, Landmark, CircleDollarSign, DollarSign, Coins,
+  ShoppingCart, ShoppingBag, Home, Briefcase, Umbrella, Fuel, Star,
+
+  // Trend icons
+  TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
+
+  // UI / misc icons
+  Bell, Search, LayoutDashboard, Calendar, Folder, Users, Presentation,
+  Moon, Sun, HelpCircle, Activity, Battery,
+
+  // Category picker icons
+  Lightbulb, Music, Gift, GraduationCap, Bike, Phone, Globe, Lock,
+  Monitor, Mail, Wrench, Scissors, Shirt, Dumbbell, Tv, Heart,
+  Compass, Coffee, BedDouble, BookOpen, Car, Utensils,
+} from 'lucide-react';
+
+// Recharts — used for the Donut / Pie charts on all pages
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+
+// Modular Layouts, Views, and Modals
+import { Sidebar } from './layout/Sidebar';
+import { DashboardView } from './views/DashboardView';
+import { ExpensesView } from './views/ExpensesView';
+import { IncomeView } from './views/IncomeView';
+import { AccountsView } from './views/AccountsView';
+import { TransactionModal } from './modals/TransactionModal';
+import { BankModal } from './modals/BankModal';
+import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
+import { CategoryManagerModal } from './modals/CategoryManagerModal';
+
+// ================================================================
+// §2. THEME CONSTANTS
+// ================================================================
+// Defines color tokens for DARK and LIGHT modes.
+// Usage: const COLORS = isDarkMode ? THEMES.dark : THEMES.light;
+// ================================================================
+const THEMES = {
+  dark: {
+    skyBlue: '#4FD1F5',
+    pink: '#EC8DF5',
+    green: '#A3ECC8',
+    yellow: '#FFE16A',
+    red: '#EF4444',
+    purple: '#A855F7',
+    orange: '#F59E0B',
+    bgMain: '#0B0F19', // Darker background
+    bgCard: '#151A2D', // Slightly lighter card
+    bgSidebar: '#0F1322', // Sidebar background
+    textPrimary: '#FFFFFF',
+    textSecondary: '#8B94A6',
+    border: 'rgba(255,255,255,0.05)',
+    borderHover: 'rgba(255,255,255,0.1)',
+    activeBg: 'rgba(255,255,255,0.05)',
+    inputBg: '#1C2237'
+  },
+  light: {
+    skyBlue: '#0284C7',
+    pink: '#D946EF',
+    green: '#059669',
+    yellow: '#D97706',
+    red: '#DC2626',
+    purple: '#7E22CE',
+    orange: '#EA580C',
+    bgMain: '#F4F7FB',
+    bgCard: '#FFFFFF',
+    bgSidebar: '#FFFFFF',
+    textPrimary: '#0F172A',
+    textSecondary: '#64748B',
+    border: 'rgba(0,0,0,0.08)',
+    borderHover: 'rgba(0,0,0,0.12)',
+    activeBg: 'rgba(0,0,0,0.04)',
+    inputBg: 'rgba(0,0,0,0.03)'
+  }
+};
+
+const ALL_CURRENCIES = [
+  { code: 'USD', name: 'United States Dollar (USD)', symbol: '$' },
+  { code: 'GBP', name: 'British Pound (GBP)', symbol: '£' },
+  { code: 'EUR', name: 'Euro (EUR)', symbol: '€' },
+  { code: 'JPY', name: 'Japanese Yen (JPY)', symbol: '¥' },
+  { code: 'CAD', name: 'Canadian Dollar (CAD)', symbol: 'C$' },
+  { code: 'AUD', name: 'Australian Dollar (AUD)', symbol: 'A$' },
+  { code: 'AED', name: 'United Arab Emirates Dirham (AED)', symbol: 'AED' },
+  { code: 'LKR', name: 'Sri Lankan Rupee (LKR)', symbol: 'LKR' },
+  { code: 'INR', name: 'Indian Rupee (INR)', symbol: '₹' },
+  { code: 'CHF', name: 'Swiss Franc (CHF)', symbol: 'CHF' },
+  { code: 'CNY', name: 'Chinese Yuan (CNY)', symbol: '¥' },
+  { code: 'SGD', name: 'Singapore Dollar (SGD)', symbol: 'S$' },
+  { code: 'NZD', name: 'New Zealand Dollar (NZD)', symbol: 'NZ$' },
+  { code: 'HKD', name: 'Hong Kong Dollar (HKD)', symbol: 'HK$' },
+  { code: 'ZAR', name: 'South African Rand (ZAR)', symbol: 'R' },
+  { code: 'SEK', name: 'Swedish Krona (SEK)', symbol: 'kr' },
+  { code: 'NOK', name: 'Norwegian Krone (NOK)', symbol: 'kr' },
+  { code: 'DKK', name: 'Danish Krone (DKK)', symbol: 'kr' },
+  { code: 'RUB', name: 'Russian Ruble (RUB)', symbol: '₽' },
+  { code: 'KRW', name: 'South Korean Won (KRW)', symbol: '₩' },
+  { code: 'TRY', name: 'Turkish Lira (TRY)', symbol: '₺' },
+  { code: 'BRL', name: 'Brazilian Real (BRL)', symbol: 'R$' },
+  { code: 'MXN', name: 'Mexican Peso (MXN)', symbol: '$' },
+  { code: 'SAR', name: 'Saudi Riyal (SAR)', symbol: 'SR' },
+  { code: 'QAR', name: 'Qatari Riyal (QAR)', symbol: 'QR' },
+  { code: 'OMR', name: 'Omani Rial (OMR)', symbol: 'RO' },
+  { code: 'BHD', name: 'Bahraini Dinar (BHD)', symbol: 'BD' },
+  { code: 'KWD', name: 'Kuwaiti Dinar (KWD)', symbol: 'KD' },
+  { code: 'MYR', name: 'Malaysian Ringgit (MYR)', symbol: 'RM' },
+  { code: 'IDR', name: 'Indonesian Rupiah (IDR)', symbol: 'Rp' },
+  { code: 'PHP', name: 'Philippine Peso (PHP)', symbol: '₱' },
+  { code: 'THB', name: 'Thai Baht (THB)', symbol: '฿' },
+  { code: 'VND', name: 'Vietnamese Dong (VND)', symbol: '₫' },
+  { code: 'PKR', name: 'Pakistani Rupee (PKR)', symbol: 'Rs' },
+  { code: 'BDT', name: 'Bangladeshi Taka (BDT)', symbol: '৳' },
+  { code: 'NPR', name: 'Nepalese Rupee (NPR)', symbol: 'Rs' },
+  { code: 'EGP', name: 'Egyptian Pound (EGP)', symbol: 'E£' },
+  { code: 'ILS', name: 'Israeli New Shekel (ILS)', symbol: '₪' },
+  { code: 'PLN', name: 'Polish Zloty (PLN)', symbol: 'zł' },
+  { code: 'HUF', name: 'Hungarian Forint (HUF)', symbol: 'Ft' },
+  { code: 'CZK', name: 'Czech Koruna (CZK)', symbol: 'Kč' },
+  { code: 'RON', name: 'Romanian Leu (RON)', symbol: 'lei' },
+  { code: 'CLP', name: 'Chilean Peso (CLP)', symbol: '$' },
+  { code: 'COP', name: 'Colombian Peso (COP)', symbol: '$' },
+  { code: 'PEN', name: 'Peruvian Sol (PEN)', symbol: 'S/.' },
+  { code: 'ARS', name: 'Argentine Peso (ARS)', symbol: '$' },
+  { code: 'UAH', name: 'Ukrainian Hryvnia (UAH)', symbol: '₴' },
+  { code: 'KZT', name: 'Kazakhstani Tenge (KZT)', symbol: '₸' },
+  { code: 'NGN', name: 'Nigerian Naira (NGN)', symbol: '₦' },
+  { code: 'KES', name: 'Kenyan Shilling (KES)', symbol: 'KSh' },
+  { code: 'GHS', name: 'Ghanaian Cedi (GHS)', symbol: 'GH₵' },
+  { code: 'TZS', name: 'Tanzanian Shilling (TZS)', symbol: 'TSh' },
+  { code: 'UGX', name: 'Ugandan Shilling (UGX)', symbol: 'USh' },
+  { code: 'MAD', name: 'Moroccan Dirham (MAD)', symbol: 'DH' },
+  { code: 'DZD', name: 'Algerian Dinar (DZD)', symbol: 'DA' },
+  { code: 'TND', name: 'Tunisian Dinar (TND)', symbol: 'DT' },
+];
+
+// ================================================================
+// §4. BANK DATA — Country-specific bank & branch name lists
+// ================================================================
+// Used in the "Bank Name" dropdown when adding bank accounts or
+// filtering transaction bank selectors based on currency.
+// ================================================================
+const SRI_LANKA_BANKS = [
+  'Bank of Ceylon (BOC)',
+  'Commercial Bank of Ceylon',
+  'Sampath Bank',
+  'Hatton National Bank (HNB)',
+  'People\'s Bank',
+  'Seylan Bank',
+  'Nations Trust Bank (NTB)'
+];
+
+const UAE_BANKS = [
+  'Emirates NBD',
+  'Abu Dhabi Commercial Bank (ADCB)',
+  'First Abu Dhabi Bank (FAB)',
+  'Dubai Islamic Bank (DIB)',
+  'Mashreq Bank',
+  'Abu Dhabi Islamic Bank (ADIB)'
+];
+
+const SRI_LANKA_BRANCHES = [
+  'Colombo Main',
+  'Kandy',
+  'Galle',
+  'Gampaha',
+  'Negombo',
+  'Jaffna',
+  'Kurunegala',
+  'Batticaloa',
+  'Trincomalee'
+];
+
+const UAE_BRANCHES = [
+  'Dubai (Main)',
+  'Abu Dhabi',
+  'Sharjah',
+  'Al Ain',
+  'Ajman',
+  'Marina (Dubai)',
+  'Jumeirah (Dubai)'
+];
+
+// ================================================================
+// §3. CURRENCY DATA — Exchange rates (all relative to USD = 1.0)
+// ================================================================
+// Used by convertCurrency() to translate amounts between currencies.
+// Update these values periodically to keep conversions accurate.
+// ================================================================
+const EXCHANGE_RATES = {
+  USD: 1.0,
+  AED: 3.6725,
+  EUR: 0.92,
+  GBP: 0.79,
+  JPY: 155.0,
+  CAD: 1.36,
+  AUD: 1.50,
+  LKR: 300.0,
+  INR: 83.3,
+  CHF: 0.90,
+  CNY: 7.23,
+  SGD: 1.35,
+  NZD: 1.63,
+  HKD: 7.80,
+  ZAR: 18.2,
+  SEK: 10.7,
+  NOK: 10.8,
+  DKK: 6.9,
+  RUB: 91.0,
+  KRW: 1350.0,
+  TRY: 32.2,
+  BRL: 5.15,
+  MXN: 16.8,
+  SAR: 3.75,
+  QAR: 3.64,
+  OMR: 0.385,
+  BHD: 0.376,
+  KWD: 0.307,
+  MYR: 4.70,
+  IDR: 16000.0,
+  PHP: 57.5,
+  THB: 36.5,
+  VND: 25400.0,
+  PKR: 278.0,
+  BDT: 117.0,
+  NPR: 133.0,
+  EGP: 47.0,
+  ILS: 3.70,
+  PLN: 3.95,
+  HUF: 355.0,
+  CZK: 22.8,
+  RON: 4.60,
+  CLP: 920.0,
+  COP: 3900.0,
+  PEN: 3.72,
+  ARS: 880.0,
+  UAH: 39.5,
+  KZT: 440.0,
+  NGN: 1450.0,
+  KES: 130.0,
+  GHS: 14.5,
+  TZS: 2600.0,
+  UGX: 3800.0,
+  MAD: 10.0,
+  DZD: 134.0,
+  TND: 3.12,
+};
+
+// ================================================================
+// §6. HELPER / UTILITY FUNCTIONS
+// ================================================================
+
+/**
+ * convertCurrency — Converts amount between two currency codes.
+ * Uses the EXCHANGE_RATES table above (USD as base).
+ * Example: convertCurrency(100, 'AED', 'LKR') → ~8168 LKR
+ */
+const convertCurrency = (amount, fromCode, toCode) => {
+  if (fromCode === toCode) return amount;
+  const rateFrom = EXCHANGE_RATES[fromCode] || 1.0;
+  const rateTo = EXCHANGE_RATES[toCode] || 1.0;
+  return (amount / rateFrom) * rateTo;
+};
+
+// All 12 months — used for the month selector dropdowns across the app
+const ALL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// ================================================================
+// §5. CATEGORY DATA
+// ================================================================
+// Income categories with nested sub-categories.
+// Expense categories are defined as state in the Dashboard component
+// so the user can add/edit/delete them dynamically at runtime.
+// ================================================================
+const INCOME_CATEGORIES = [
+  { id: 'inc-1', name: 'Salary', icon: Briefcase, subCategories: [{ id: 'is1', name: 'Regular Salary', icon: Briefcase }, { id: 'is2', name: 'Bonus', icon: Briefcase }] },
+  { id: 'inc-2', name: 'Business', icon: Landmark, subCategories: [{ id: 'is3', name: 'Consulting', icon: Landmark }, { id: 'is4', name: 'Product Sales', icon: Landmark }] },
+  { id: 'inc-3', name: 'Investment', icon: TrendingUp, subCategories: [{ id: 'is5', name: 'Dividends', icon: TrendingUp }, { id: 'is6', name: 'Interest', icon: TrendingUp }, { id: 'is7', name: 'Rental Income', icon: Home }] },
+  { id: 'inc-4', name: 'Gifts/Grants', icon: Gift, subCategories: [{ id: 'is8', name: 'Birthday Gift', icon: Gift }, { id: 'is9', name: 'Government Grant', icon: Gift }] },
+  { id: 'inc-5', name: 'Others', icon: Coins, subCategories: [{ id: 'is10', name: 'General Income', icon: Coins }] },
+];
+
+const donutData = [
+  { name: 'Housing', value: 45, color: '#4FD1F5' },
+  { name: 'Food', value: 25, color: '#A3ECC8' },
+  { name: 'Transport', value: 20, color: '#F59E0B' },
+  { name: 'Leisure', value: 10, color: '#A855F7' },
+];
+
+const transactions = [
+  { id: 1, date: 'Jun 14, 2024', desc: 'Apple Store - MacBook Pro', category: 'Technology', amount: '- AED 9,499.00', color: '#A855F7', type: 'expense' },
+  { id: 2, date: 'Jun 12, 2024', desc: 'Monthly Rental Payment', category: 'Housing', amount: '- AED 6,500.00', color: '#0EA5E9', type: 'expense' },
+  { id: 3, date: 'Jun 05, 2024', desc: 'Salary Deposit', category: 'Income', amount: '+ AED 28,500.00', color: '#22C55E', type: 'income' },
+  { id: 4, date: 'Jun 02, 2024', desc: 'Emirates Airlines Flight', category: 'Travel', amount: '- AED 3,240.00', color: '#F59E0B', type: 'expense' },
+  { id: 5, date: 'May 28, 2024', desc: 'Car Service - Tesla', category: 'Transport', amount: '- AED 1,850.00', color: '#F59E0B', type: 'expense' },
+];
+
+const savingsAllocations = [
+  { name: 'Emergency Fund', amount: 0 },
+  { name: 'Car Replacement', amount: 0 },
+  { name: 'Retirement Fund', amount: 0 },
+  { name: 'Investments', amount: 0 },
+  { name: 'Education Fund', amount: 0 },
+  { name: 'Other', amount: 0 },
+  { name: 'Other', amount: 0 },
+];
+
+// ──────────────────────────────────────────────────────────────
+// AVAILABLE_ICONS — Icon picker options for custom categories
+// Each entry has { name: string, icon: LucideComponent }
+// ──────────────────────────────────────────────────────────────
+const AVAILABLE_ICONS = [
+  { name: 'Home', icon: Home },
+  { name: 'Lightbulb', icon: Lightbulb },
+  { name: 'ShoppingBag', icon: ShoppingBag },
+  { name: 'ShoppingCart', icon: ShoppingCart },
+  { name: 'Music', icon: Music },
+  { name: 'Fuel', icon: Fuel },
+  { name: 'Landmark', icon: Landmark },
+  { name: 'BedDouble', icon: BedDouble },
+  { name: 'BookOpen', icon: BookOpen },
+  { name: 'Briefcase', icon: Briefcase },
+  { name: 'CreditCard', icon: CreditCard },
+  { name: 'Car', icon: Car },
+  { name: 'Coins', icon: Coins },
+  { name: 'Wallet', icon: Wallet },
+  { name: 'Users', icon: Users },
+  { name: 'Coffee', icon: Coffee },
+  { name: 'Utensils', icon: Utensils },
+  { name: 'Trash2', icon: Trash2 },
+  { name: 'Gift', icon: Gift },
+  { name: 'GraduationCap', icon: GraduationCap },
+  { name: 'Bike', icon: Bike },
+  { name: 'Phone', icon: Phone },
+  { name: 'Globe', icon: Globe },
+  { name: 'Lock', icon: Lock },
+  { name: 'Monitor', icon: Monitor },
+  { name: 'Mail', icon: Mail },
+  { name: 'Umbrella', icon: Umbrella },
+  { name: 'Wrench', icon: Wrench },
+  { name: 'Scissors', icon: Scissors },
+  { name: 'Shirt', icon: Shirt },
+  { name: 'Dumbbell', icon: Dumbbell },
+  { name: 'Tv', icon: Tv },
+  { name: 'Heart', icon: Heart },
+  { name: 'Compass', icon: Compass },
+  { name: 'Activity', icon: Activity }
+];
+
+
+
+// ================================================================
+// §7. DASHBOARD COMPONENT
+// ================================================================
+// The main React component that powers the entire app.
+// All pages are rendered as conditional blocks inside this component.
+// ================================================================
+const Dashboard = () => {
+  // ── Date/Period helpers ────────────────────────────────────────
+  const currentYearStr  = new Date().getFullYear().toString();
+  const currentMonthStr = ALL_MONTHS[new Date().getMonth()];
+
+  // ── §7a: STATE VARIABLES ─────────────────────────────────────
+
+  // UI State — sidebar toggle, active page, dark/light mode
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeMenu,  setActiveMenu]  = useState('Dashboard');
+  const [isDarkMode,  setIsDarkMode]  = useState(true);
+
+  // Date/Period selectors — used to filter expenses & incomes by month/year
+  const [years,         setYears]         = useState([currentYearStr]);
+  const [selectedYear,  setSelectedYear]  = useState(currentYearStr);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+
+  // Expenses — raw list + which one is being edited (null = adding new)
+  const [expenses,         setExpenses]         = useState([]);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+
+  // Incomes list + whether the current modal is for 'expense' or 'income'
+  const [incomes,   setIncomes]   = useState([]);
+  const [formType,  setFormType]  = useState('expense'); // 'expense' | 'income'
+
+  useEffect(() => {
+    const fetchExpenses = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/expenses');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            const hydrated = data.map(exp => ({
+              ...exp,
+              icon: getIconForCategory(exp.category)
+            }));
+            setExpenses(hydrated);
+            localStorage.setItem('budget_expenses', JSON.stringify(hydrated));
+
+            const uniqueYears = Array.from(new Set(hydrated.map(exp => exp.date?.split('-')[0]).filter(Boolean)));
+            const currentYear = new Date().getFullYear().toString();
+            if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
+            setYears(uniqueYears.sort((a, b) => b - a));
+          }
+        } else {
+          const cached = localStorage.getItem('budget_expenses');
+          if (cached) setExpenses(JSON.parse(cached));
+        }
+      } catch (err) {
+        console.warn('API unavailable, falling back to LocalStorage cache:', err);
+        const cached = localStorage.getItem('budget_expenses');
+        if (cached) setExpenses(JSON.parse(cached));
+      }
+    };
+
+    const fetchIncomes = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/incomes');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            const hydrated = data.map(inc => ({
+              ...inc,
+              icon: getIconForCategory(inc.category)
+            }));
+            setIncomes(hydrated);
+            localStorage.setItem('budget_incomes', JSON.stringify(hydrated));
+          }
+        } else {
+          const cached = localStorage.getItem('budget_incomes');
+          if (cached) setIncomes(JSON.parse(cached));
+        }
+      } catch (err) {
+        console.warn('API unavailable, falling back to LocalStorage cache:', err);
+        const cached = localStorage.getItem('budget_incomes');
+        if (cached) setIncomes(JSON.parse(cached));
+      }
+    };
+
+    fetchExpenses();
+    fetchIncomes();
+  }, []);
+
+  const syncExpensesToDatabase = async (updatedExpenses) => {
+    localStorage.setItem('budget_expenses', JSON.stringify(updatedExpenses));
+    try {
+      await fetch('http://localhost:5000/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expenses: updatedExpenses })
+      });
+    } catch (err) {
+      console.warn('Could not sync to Google Sheets, saved to local cache:', err);
+    }
+  };
+
+  const syncIncomesToDatabase = async (updatedIncomes) => {
+    localStorage.setItem('budget_incomes', JSON.stringify(updatedIncomes));
+    try {
+      await fetch('http://localhost:5000/api/incomes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ incomes: updatedIncomes })
+      });
+    } catch (err) {
+      console.warn('Could not sync incomes to Google Sheets, saved to local cache:', err);
+    }
+  };
+
+  // Add / Edit Expense+Income modal — open/close flag
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+
+  // Transaction form field states (shared between expense AND income modals)
+  const [formDate,     setFormDate]     = useState(new Date().toISOString().split('T')[0]);
+  const [formCategory, setFormCategory] = useState('Home/Rent');
+  const [formSubcategory, setFormSubcategory] = useState('Rent');
+  const [formAmount,   setFormAmount]   = useState('');
+  const [formPayee,    setFormPayee]    = useState('');
+
+  // Payment source: 'Bank Account' | 'Credit Card' | 'Cash' | ''
+  const [formPayFrom,  setFormPayFrom]  = useState('Bank Account');
+
+  // Bank name selected from the filtered dropdown
+  const [formBankName, setFormBankName] = useState('');
+
+  // Secondary details (account type + branch) for the selected bank,
+  // e.g. 'Savings - Colombo Main' or 'Credit Card - Dubai (Main)'
+  const [formSelectedAccountDetails, setFormSelectedAccountDetails] = useState('');
+
+  const [formNotes,    setFormNotes]    = useState('');
+  const [formCurrency, setFormCurrency] = useState('AED');
+
+  // Currency Manager modal — lets the user add/remove currencies
+  const [isCurrencyManagerOpen,    setIsCurrencyManagerOpen]    = useState(false);
+  const [selectedCurrencyToAdd,    setSelectedCurrencyToAdd]    = useState('USD');
+  // Active currency list (persisted to localStorage)
+  // Default includes AED as the primary currency
+  const [currencies, setCurrencies] = useState(() => {
+    const cached = localStorage.getItem('budget_currencies');
+    return cached ? JSON.parse(cached) : [
+      { code: 'USD', name: 'United States Dollar (USD)', symbol: '$' },
+      { code: 'GBP', name: 'British Pound (GBP)', symbol: '£' },
+      { code: 'EUR', name: 'Euro (EUR)', symbol: '€' },
+      { code: 'JPY', name: 'Japanese Yen (JPY)', symbol: '¥' },
+      { code: 'CAD', name: 'Canadian Dollar (CAD)', symbol: 'C$' },
+      { code: 'AUD', name: 'Australian Dollar (AUD)', symbol: 'A$' },
+      { code: 'AED', name: 'Default', symbol: 'AED', isDefault: true }
+    ];
+  });
+
+  // Bank Accounts — persisted to localStorage
+  // Structure of each account:
+  //   { id, bankName, accountType, currency, balance, limit, remainingLimit,
+  //     branch, country, accountNumbers[] }
+  const [bankAccounts, setBankAccounts] = useState(() => {
+    const cached = localStorage.getItem('budget_bank_accounts');
+    const baseList = cached ? JSON.parse(cached) : [
+      { id: 'b1', bankName: 'BOC', accountType: 'Savings', currency: 'LKR', balance: 250000, accountNumbers: ['1204-5678-9012'], balances: [250000] },
+      { id: 'b2', bankName: 'Commercial Bank', accountType: 'Credit Card', currency: 'AED', limit: 10000, remainingLimit: 7500 },
+      { id: 'b3', bankName: 'Sampath Bank', accountType: 'Savings', currency: 'LKR', balance: 120000, accountNumbers: ['9081-2345-6789'], balances: [120000] }
+    ];
+    return baseList.map(b => {
+      if (b.accountType !== 'Credit Card') {
+        const hasNumbers = Array.isArray(b.accountNumbers) && b.accountNumbers.length > 0 && b.accountNumbers[0];
+        const hasBalances = Array.isArray(b.balances) && b.balances.length > 0;
+        return {
+          ...b,
+          accountNumbers: hasNumbers ? b.accountNumbers : [b.id === 'b1' ? '1204-5678-9012' : (b.id === 'b3' ? '9081-2345-6789' : '9999-8888-7777')],
+          balances: hasBalances ? b.balances : [b.balance || 0]
+        };
+      }
+      return b;
+    });
+  });
+
+  // Persist bank accounts whenever the list changes
+  useEffect(() => {
+    localStorage.setItem('budget_bank_accounts', JSON.stringify(bankAccounts));
+  }, [bankAccounts]);
+
+  // Bank Account MODAL state — open/close + which record is being edited
+  const [isBankModalOpen,      setIsBankModalOpen]      = useState(false);
+  const [editingBankAccountId, setEditingBankAccountId] = useState(null);
+  const [bankFormName,         setBankFormName]         = useState('');
+  const [bankFormType,         setBankFormType]         = useState('Savings');
+  const [bankFormCurrency,     setBankFormCurrency]     = useState('LKR');
+  const [bankFormBalance,      setBankFormBalance]      = useState('');
+  const [bankFormLimit,        setBankFormLimit]        = useState('');
+  const [bankFormRemainingLimit, setBankFormRemainingLimit] = useState('');
+
+  const [bankFormCountry, setBankFormCountry] = useState('Sri Lanka');
+  const [bankFormBranch, setBankFormBranch] = useState('');
+  
+  // Custom user-added items for the bank modal dropdowns
+  // These are saved to localStorage so they persist across sessions
+  const [customBanks, setCustomBanks] = useState(() => {
+    const cached = localStorage.getItem('budget_custom_banks');
+    return cached ? JSON.parse(cached) : [];
+  });
+  useEffect(() => {
+    localStorage.setItem('budget_custom_banks', JSON.stringify(customBanks));
+  }, [customBanks]);
+
+  const [customAccountTypes, setCustomAccountTypes] = useState(() => {
+    const cached = localStorage.getItem('budget_custom_account_types');
+    return cached ? JSON.parse(cached) : [];
+  });
+  useEffect(() => {
+    localStorage.setItem('budget_custom_account_types', JSON.stringify(customAccountTypes));
+  }, [customAccountTypes]);
+
+  const [customBranches, setCustomBranches] = useState(() => {
+    const cached = localStorage.getItem('budget_custom_branches');
+    return cached ? JSON.parse(cached) : [];
+  });
+  useEffect(() => {
+    localStorage.setItem('budget_custom_branches', JSON.stringify(customBranches));
+  }, [customBranches]);
+
+  // Inline "Add custom" input visibility toggles + their text values
+  const [showAddCustomBank,   setShowAddCustomBank]   = useState(false);
+  const [newCustomBankName,   setNewCustomBankName]   = useState('');
+  const [showAddCustomType,   setShowAddCustomType]   = useState(false);
+  const [newCustomTypeName,   setNewCustomTypeName]   = useState('');
+  const [showAddCustomBranch, setShowAddCustomBranch] = useState(false);
+  const [newCustomBranchName, setNewCustomBranchName] = useState('');
+
+  // Multi-account rows for Savings/Current bank accounts:
+  // Each array index corresponds to one account number + its balance.
+  // e.g. accountNumbers[0]='111-222' + balances[0]='50000'
+  const [bankFormAccountNumbers, setBankFormAccountNumbers] = useState(['']);
+  const [bankFormBalances,       setBankFormBalances]       = useState(['']);
+
+  // Category manager state — for the modal that lets users add/edit/delete categories
+  const [isCategoriesManagerOpen, setIsCategoriesManagerOpen] = useState(false);
+  const [isAddCategoryOpen,       setIsAddCategoryOpen]       = useState(false);
+  const [newCategoryName,         setNewCategoryName]         = useState('');
+  const [newCategoryIcon,         setNewCategoryIcon]         = useState(Star);
+  const [isEditCategoryOpen,      setIsEditCategoryOpen]      = useState(false);
+  const [editingCategory,         setEditingCategory]         = useState(null);
+  const [editCategoryName,        setEditCategoryName]        = useState('');
+  const [editCategoryIcon,        setEditCategoryIcon]        = useState(Star);
+
+  // Sub-category manager state — nested under a parent category
+  const [isSubCategoriesManagerOpen, setIsSubCategoriesManagerOpen] = useState(false);
+  const [activeParentCategory,       setActiveParentCategory]       = useState(null);
+  const [isAddSubCategoryOpen,       setIsAddSubCategoryOpen]       = useState(false);
+  const [newSubCategoryName,         setNewSubCategoryName]         = useState('');
+  const [newSubCategoryIcon,         setNewSubCategoryIcon]         = useState(Star);
+  const [isEditSubCategoryOpen,      setIsEditSubCategoryOpen]      = useState(false);
+  const [editingSubCategory,         setEditingSubCategory]         = useState(null);
+  const [editSubCategoryName,        setEditSubCategoryName]        = useState('');
+  const [editSubCategoryIcon,        setEditSubCategoryIcon]        = useState(Star);
+
+  // Expense categories — user can add/edit/delete these at runtime
+  // (Income categories are static INCOME_CATEGORIES constant above)
+  const [categories, setCategories] = useState([
+    { id: '1', name: 'Home/Rent', icon: Home, subCategories: [
+      { id: 's1', name: 'Mortgage', icon: Home },
+      { id: 's2', name: 'Mortgage-2nd', icon: Home },
+      { id: 's3', name: 'Rent', icon: Home },
+      { id: 's4', name: 'Association fee', icon: Home },
+      { id: 's5', name: 'Property tax', icon: Home }
+    ]},
+    { id: '2', name: 'Utilities', icon: Lightbulb, subCategories: [
+      { id: 's6', name: 'Electricity', icon: Lightbulb },
+      { id: 's7', name: 'Water', icon: Lightbulb },
+      { id: 's8', name: 'Gas', icon: Lightbulb },
+      { id: 's9', name: 'Internet', icon: Lightbulb }
+    ]},
+    { id: '3', name: 'Food/Groceries', icon: ShoppingCart, subCategories: [
+      { id: 's10', name: 'Groceries', icon: ShoppingCart },
+      { id: 's11', name: 'Restaurant', icon: ShoppingCart },
+      { id: 's12', name: 'Snacks', icon: ShoppingCart }
+    ]},
+    { id: '4', name: 'Departmental', icon: ShoppingBag, subCategories: [
+      { id: 's13', name: 'Clothing', icon: ShoppingBag },
+      { id: 's14', name: 'Electronics', icon: ShoppingBag }
+    ]},
+    { id: '5', name: 'Entertainment', icon: Music, subCategories: [
+      { id: 's15', name: 'Movies', icon: Music },
+      { id: 's16', name: 'Games', icon: Music },
+      { id: 's17', name: 'Subscribes', icon: Music }
+    ]},
+    { id: '6', name: 'Car/Auto', icon: Fuel, subCategories: [
+      { id: 's18', name: 'Fuel/Gas', icon: Fuel },
+      { id: 's19', name: 'Service', icon: Fuel },
+      { id: 's20', name: 'Parking', icon: Fuel }
+    ]},
+    { id: '7', name: 'Insurance/Medical', icon: Umbrella, subCategories: [
+      { id: 's21', name: 'Insurance', icon: Umbrella },
+      { id: 's22', name: 'Medical', icon: Umbrella }
+    ]},
+    { id: '8', name: 'Misc/One-time', icon: Star, subCategories: [
+      { id: 's23', name: 'General', icon: Star }
+    ]}
+  ]);
+
+  // OOP Budget Service Instance — acts as the main engine for business logic
+  const budgetService = new BudgetService(expenses, incomes, bankAccounts);
+
+  // ── §7b: COMPONENT-LEVEL HELPERS ────────────────────────────
+
+  /**
+   * getIconForCategory
+   * Returns the Lucide icon component for a given category name.
+   * Checks expense categories first, then income categories.
+   * Falls back to the Wallet icon if no match is found.
+   */
+  const getIconForCategory = (catName) => {
+    const foundExpense = categories.find(c => c.name.toLowerCase() === catName?.toLowerCase());
+    if (foundExpense) return foundExpense.icon;
+    const foundIncome = INCOME_CATEGORIES.find(c => c.name.toLowerCase() === catName?.toLowerCase());
+    return foundIncome ? foundIncome.icon : Wallet;
+  };
+
+  /**
+   * formatExpenseDate
+   * Converts ISO date string 'YYYY-MM-DD' → readable 'Jan 5, 2026'.
+   * Used in all transaction table rows.
+   */
+  const formatExpenseDate = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const year     = parts[0];
+    const monthIdx = parseInt(parts[1], 10) - 1;
+    const day      = parseInt(parts[2], 10);
+    const monthName = ALL_MONTHS[monthIdx]?.substring(0, 3);
+    return `${monthName} ${day}, ${year}`;
+  };
+
+  // ── §7c: COMPUTED FILTERED DATA ──────────────────────────────
+  // These arrays re-compute whenever expenses/incomes or the selected
+  // year/month change. All charts and tables read from these.
+
+  // Only expenses that match the currently selected year + month
+  const filteredExpenses = expenses.filter(exp => {
+    if (!exp.date) return false;
+    const parts = exp.date.split('-');
+    if (parts.length !== 3) return false;
+    const expYear = parts[0];
+    if (selectedMonth === 'Full Year') return expYear === selectedYear;
+    const expMonthIndex = parseInt(parts[1], 10) - 1;
+    const expMonth = ALL_MONTHS[expMonthIndex];
+    return expYear === selectedYear && expMonth === selectedMonth;
+  });
+
+  // Only incomes that match the currently selected year + month
+  const filteredIncomes = incomes.filter(inc => {
+    if (!inc.date) return false;
+    const parts = inc.date.split('-');
+    if (parts.length !== 3) return false;
+    const incYear = parts[0];
+    if (selectedMonth === 'Full Year') return incYear === selectedYear;
+    const incMonthIndex = parseInt(parts[1], 10) - 1;
+    const incMonth = ALL_MONTHS[incMonthIndex];
+    return incYear === selectedYear && incMonth === selectedMonth;
+  });
+
+  // Calculate previous month's/year's stats for trend comparisons
+  const currentMonthIdx = ALL_MONTHS.indexOf(selectedMonth);
+  let prevMonthIdx = currentMonthIdx - 1;
+  let prevYear = parseInt(selectedYear, 10);
+  if (selectedMonth === 'Full Year') {
+    prevYear -= 1;
+  } else if (prevMonthIdx < 0) {
+    prevMonthIdx = 11;
+    prevYear -= 1;
+  }
+  const prevMonthName = prevMonthIdx >= 0 ? ALL_MONTHS[prevMonthIdx] : null;
+  const prevYearStr = prevYear.toString();
+
+  const prevExpenses = expenses.filter(exp => {
+    if (!exp.date) return false;
+    const parts = exp.date.split('-');
+    if (parts.length !== 3) return false;
+    const expYear = parts[0];
+    if (selectedMonth === 'Full Year') {
+      return expYear === prevYearStr;
+    }
+    const expMonthIndex = parseInt(parts[1], 10) - 1;
+    const expMonth = ALL_MONTHS[expMonthIndex];
+    return expYear === prevYearStr && expMonth === prevMonthName;
+  });
+
+  const prevIncomes = incomes.filter(inc => {
+    if (!inc.date) return false;
+    const parts = inc.date.split('-');
+    if (parts.length !== 3) return false;
+    const incYear = parts[0];
+    if (selectedMonth === 'Full Year') {
+      return incYear === prevYearStr;
+    }
+    const incMonthIndex = parseInt(parts[1], 10) - 1;
+    const incMonth = ALL_MONTHS[incMonthIndex];
+    return incYear === prevYearStr && incMonth === prevMonthName;
+  });
+
+
+
+  // ── §7d: EVENT HANDLERS ──────────────────────────────────────
+  // All CRUD operations for expenses, incomes, and bank accounts.
+
+  // ─── Bank Account Handlers ────────────────────────────────────
+
+  /**
+   * handleSaveBankAccount
+   * Validates and saves a new or edited bank account to state.
+   * Handles both Credit Card (limit/remainingLimit) and
+   * Savings/Current (multiple account numbers + balances).
+   */
+  const handleSaveBankAccount = () => {
+    if (!bankFormName || !bankFormName.trim()) {
+      alert('Please select or enter a valid bank name.');
+      return;
+    }
+
+    const isCreditCard = bankFormType === 'Credit Card';
+    
+    let parsedBalance = 0;
+    let parsedLimit = isCreditCard ? parseFloat(bankFormLimit || '0') : 0;
+    let parsedRemaining = isCreditCard ? parseFloat(bankFormRemainingLimit || '0') : 0;
+    
+    let savedAccountNumbers = [];
+    let savedBalances = [];
+
+    if (isCreditCard) {
+      if (isNaN(parsedLimit) || isNaN(parsedRemaining)) {
+        alert('Please enter valid credit card limit details.');
+        return;
+      }
+    } else {
+      const parsedBalancesArray = bankFormBalances.map(b => parseFloat(b || '0'));
+      for (let i = 0; i < parsedBalancesArray.length; i++) {
+        if (isNaN(parsedBalancesArray[i])) {
+          alert(`Please enter a valid balance for account #${i + 1}`);
+          return;
+        }
+      }
+      
+      savedAccountNumbers = [...bankFormAccountNumbers];
+      savedBalances = parsedBalancesArray;
+      parsedBalance = parsedBalancesArray.reduce((sum, val) => sum + val, 0);
+    }
+
+    try {
+      budgetService.saveBankAccount(editingBankAccountId, {
+        country: bankFormCountry,
+        bankName: bankFormName.trim(),
+        accountType: bankFormType,
+        currency: bankFormCurrency,
+        branch: bankFormBranch,
+        balance: parsedBalance,
+        limit: parsedLimit,
+        remainingLimit: parsedRemaining,
+        accountNumbers: savedAccountNumbers,
+        balances: savedBalances
+      });
+      setBankAccounts(budgetService.bankAccounts.map(b => b.toJSON()));
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+
+    setIsBankModalOpen(false);
+    setEditingBankAccountId(null);
+    
+    // Reset Form
+    setBankFormCountry('Sri Lanka');
+    setBankFormName('');
+    setBankFormType('Savings');
+    setBankFormCurrency('LKR');
+    setBankFormBranch('');
+    setBankFormBalance('');
+    setBankFormLimit('');
+    setBankFormRemainingLimit('');
+    setBankFormAccountNumbers(['']);
+    setBankFormBalances(['']);
+  };
+
+  const handleEditBankAccount = (account) => {
+    const rawAccount = bankAccounts.find(b => b.id === account.id) || account;
+    setEditingBankAccountId(rawAccount.id);
+    setBankFormCountry(rawAccount.country || 'Sri Lanka');
+    setBankFormName(rawAccount.bankName);
+    setBankFormType(rawAccount.accountType);
+    setBankFormCurrency(rawAccount.currency);
+    setBankFormBranch(rawAccount.branch || '');
+    setBankFormBalance(rawAccount.balance ? rawAccount.balance.toString() : '');
+    setBankFormLimit(rawAccount.limit ? rawAccount.limit.toString() : '');
+    setBankFormRemainingLimit(rawAccount.remainingLimit ? rawAccount.remainingLimit.toString() : '');
+    
+    if (rawAccount.accountNumbers && rawAccount.accountNumbers.length > 0) {
+      setBankFormAccountNumbers([...rawAccount.accountNumbers]);
+      setBankFormBalances(rawAccount.balances ? rawAccount.balances.map(b => b.toString()) : ['0']);
+    } else {
+      setBankFormAccountNumbers(['']);
+      setBankFormBalances([rawAccount.balance ? rawAccount.balance.toString() : '']);
+    }
+    
+    setIsBankModalOpen(true);
+  };
+
+  /**
+   * handleDeleteBankAccount
+   * Shows a warning dialog before permanently deleting a bank account.
+   */
+  const handleDeleteBankAccount = (id) => {
+    const confirm = window.confirm('⚠️ WARNING: Are you sure you want to delete this bank account? This action cannot be undone.');
+    if (confirm) {
+      budgetService.deleteBankAccount(id);
+      setBankAccounts(budgetService.bankAccounts.map(b => b.toJSON()));
+    }
+  };
+
+  // ─── Expense / Income Handlers ────────────────────────────────
+
+  /**
+   * handleSaveExpense
+   * Validates form, formats the bankName with account details appended,
+   * then adds a new or updates an existing expense/income in the list.
+   * Syncs to localStorage + backend API via syncExpensesToDatabase.
+   */
+  const handleSaveExpense = () => {
+    if (!formAmount || isNaN(formAmount) || parseFloat(formAmount) <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+
+    let savedBankName = formBankName;
+    if ((formPayFrom === 'Bank Account' || formPayFrom === 'Credit Card') && formBankName) {
+      if (formSelectedAccountDetails) {
+        savedBankName = `${formBankName} (${formSelectedAccountDetails})`;
+      }
+    }
+
+    try {
+      budgetService.saveTransaction(formType, editingExpenseId, {
+        date: formDate,
+        category: formCategory,
+        subCategory: formSubcategory,
+        amount: parseFloat(formAmount),
+        currency: formCurrency,
+        account: formPayFrom || 'Cash',
+        bankName: (formPayFrom === 'Bank Account' || formPayFrom === 'Credit Card') ? savedBankName : '',
+        notes: formNotes,
+        icon: getIconForCategory(formCategory)
+      });
+      setExpenses(budgetService.expenses.map(e => e.toJSON()));
+      setIncomes(budgetService.incomes.map(i => i.toJSON()));
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    
+    // Reset form
+    setFormAmount('');
+    setFormBankName('');
+    setFormSelectedAccountDetails('');
+    setFormNotes('');
+    setIsAddExpenseOpen(false);
+  };
+
+  const handleEditExpense = (exp) => {
+    setFormType('expense');
+    setEditingExpenseId(exp.id);
+    setFormDate(exp.date);
+    setFormCategory(exp.category);
+    setFormSubcategory(exp.subCategory);
+    setFormAmount(exp.amount.toString());
+    setFormCurrency(exp.currency || 'AED');
+    setFormPayFrom(exp.account);
+    
+    let bankPart = exp.bankName || '';
+    let detailPart = '';
+    if (bankPart.includes(' (')) {
+      const parts = bankPart.split(' (');
+      bankPart = parts[0];
+      detailPart = parts[1].replace(')', '');
+    }
+    setFormBankName(bankPart);
+    setFormSelectedAccountDetails(detailPart);
+    
+    setFormNotes(exp.notes);
+    setIsAddExpenseOpen(true);
+  };
+
+  const handleEditIncome = (inc) => {
+    setFormType('income');
+    setEditingExpenseId(inc.id);
+    setFormDate(inc.date);
+    setFormCategory(inc.category);
+    setFormSubcategory(inc.subCategory);
+    setFormAmount(inc.amount.toString());
+    setFormCurrency(inc.currency || 'AED');
+    setFormPayFrom(inc.account);
+    
+    let bankPart = inc.bankName || '';
+    let detailPart = '';
+    if (bankPart.includes(' (')) {
+      const parts = bankPart.split(' (');
+      bankPart = parts[0];
+      detailPart = parts[1].replace(')', '');
+    }
+    setFormBankName(bankPart);
+    setFormSelectedAccountDetails(detailPart);
+    
+    setFormNotes(inc.notes);
+    setIsAddExpenseOpen(true);
+  };
+
+  const handleDeleteExpense = (id) => {
+    const confirm = window.confirm("Are you sure you want to delete this expense?");
+    if (confirm) {
+      budgetService.deleteTransaction('expense', id);
+      setExpenses(budgetService.expenses.map(e => e.toJSON()));
+    }
+  };
+
+  const handleDeleteIncome = (id) => {
+    const confirm = window.confirm("Are you sure you want to delete this income?");
+    if (confirm) {
+      budgetService.deleteTransaction('income', id);
+      setIncomes(budgetService.incomes.map(i => i.toJSON()));
+    }
+  };
+
+  const handleStartAddCategory = () => {
+    setNewCategoryName('');
+    setNewCategoryIcon(Star);
+    setIsAddCategoryOpen(true);
+  };
+
+  const handleSaveNewCategory = () => {
+    if (!newCategoryName || !newCategoryName.trim()) {
+      alert('Please enter a valid category name.');
+      return;
+    }
+
+    const name = newCategoryName.trim();
+
+    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      alert('This category name already exists!');
+      return;
+    }
+
+    setCategories([
+      ...categories,
+      { id: Date.now().toString(), name, icon: newCategoryIcon }
+    ]);
+
+    setIsAddCategoryOpen(false);
+  };
+
+  const handleDeleteCategory = (id) => {
+    const cat = categories.find(c => c.id === id);
+    if (cat) {
+      const confirm = window.confirm(`Are you sure you want to delete the category "${cat.name}"?`);
+      if (confirm) {
+        setCategories(categories.filter(c => c.id !== id));
+      }
+    }
+  };
+
+  const handleStartEditCategory = (cat) => {
+    setEditingCategory(cat);
+    setEditCategoryName(cat.name);
+    setEditCategoryIcon(cat.icon || Star);
+    setIsEditCategoryOpen(true);
+  };
+
+  const handleSaveCategoryEdit = () => {
+    if (!editCategoryName || !editCategoryName.trim()) {
+      alert('Please enter a valid category name.');
+      return;
+    }
+
+    const updatedName = editCategoryName.trim();
+
+    if (categories.some(c => c.id !== editingCategory.id && c.name.toLowerCase() === updatedName.toLowerCase())) {
+      alert('This category name already exists!');
+      return;
+    }
+
+    setCategories(categories.map(c => c.id === editingCategory.id ? {
+      ...c,
+      name: updatedName,
+      icon: editCategoryIcon
+    } : c));
+
+    const updatedList = expenses.map(exp => {
+      if (exp.category === editingCategory.name) {
+        return {
+          ...exp,
+          category: updatedName,
+          icon: editCategoryIcon
+        };
+      }
+      return exp;
+    });
+
+    setExpenses(updatedList);
+    syncExpensesToDatabase(updatedList);
+
+    if (formCategory === editingCategory.name) {
+      setFormCategory(updatedName);
+    }
+
+    setIsEditCategoryOpen(false);
+    setEditingCategory(null);
+  };
+
+  const handleOpenSubCategoriesManager = (cat) => {
+    setActiveParentCategory(cat);
+    setIsSubCategoriesManagerOpen(true);
+  };
+
+  const handleDeleteSubCategory = (subId) => {
+    const confirm = window.confirm("Are you sure you want to delete this subcategory?");
+    if (confirm) {
+      setCategories(categories.map(c => {
+        if (c.id === activeParentCategory.id) {
+          const updatedSubs = c.subCategories.filter(s => s.id !== subId);
+          setActiveParentCategory({ ...c, subCategories: updatedSubs });
+          return { ...c, subCategories: updatedSubs };
+        }
+        return c;
+      }));
+    }
+  };
+
+  const handleStartAddSubCategory = () => {
+    setNewSubCategoryName('');
+    setNewSubCategoryIcon(activeParentCategory.icon || Star);
+    setIsAddSubCategoryOpen(true);
+  };
+
+  const handleSaveNewSubCategory = () => {
+    if (!newSubCategoryName || !newSubCategoryName.trim()) {
+      alert("Please enter a valid subcategory name.");
+      return;
+    }
+    const name = newSubCategoryName.trim();
+    if (activeParentCategory.subCategories?.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+      alert("This subcategory already exists!");
+      return;
+    }
+
+    const newSubObj = {
+      id: Date.now().toString(),
+      name,
+      icon: newSubCategoryIcon
+    };
+
+    setCategories(categories.map(c => {
+      if (c.id === activeParentCategory.id) {
+        const updatedSubs = [...(c.subCategories || []), newSubObj];
+        setActiveParentCategory({ ...c, subCategories: updatedSubs });
+        return { ...c, subCategories: updatedSubs };
+      }
+      return c;
+    }));
+
+    setIsAddSubCategoryOpen(false);
+  };
+
+  const handleStartEditSubCategory = (sub) => {
+    setEditingSubCategory(sub);
+    setEditSubCategoryName(sub.name);
+    setEditSubCategoryIcon(sub.icon || activeParentCategory.icon || Star);
+    setIsEditSubCategoryOpen(true);
+  };
+
+  const handleSaveEditSubCategory = () => {
+    if (!editSubCategoryName || !editSubCategoryName.trim()) {
+      alert("Please enter a valid subcategory name.");
+      return;
+    }
+    const updatedName = editSubCategoryName.trim();
+    if (activeParentCategory.subCategories?.some(s => s.id !== editingSubCategory.id && s.name.toLowerCase() === updatedName.toLowerCase())) {
+      alert("This subcategory name already exists!");
+      return;
+    }
+
+    setCategories(categories.map(c => {
+      if (c.id === activeParentCategory.id) {
+        const updatedSubs = c.subCategories.map(s => s.id === editingSubCategory.id ? {
+          ...s,
+          name: updatedName,
+          icon: editSubCategoryIcon
+        } : s);
+        setActiveParentCategory({ ...c, subCategories: updatedSubs });
+        return { ...c, subCategories: updatedSubs };
+      }
+      return c;
+    }));
+
+    const updatedList = expenses.map(exp => {
+      if (exp.category === activeParentCategory.name && exp.subCategory === editingSubCategory.name) {
+        return {
+          ...exp,
+          subCategory: updatedName
+        };
+      }
+      return exp;
+    });
+
+    setExpenses(updatedList);
+    syncExpensesToDatabase(updatedList);
+
+    setIsEditSubCategoryOpen(false);
+    setEditingSubCategory(null);
+  };
+
+  // ── §7e: COMPUTED VALUES ────────────────────────────────────────
+  // Active color palette based on current dark/light mode toggle
+  const COLORS = isDarkMode ? THEMES.dark : THEMES.light;
+
+  // The "default" currency is the one marked isDefault in the currencies list
+  const defaultCurrencyObj = currencies.find(c => c.isDefault)
+    || currencies.find(c => c.code === 'AED')
+    || currencies[0]
+    || { code: 'AED', symbol: 'AED' };
+  const currencyCode   = defaultCurrencyObj.code;
+
+  // Helper to sum by currency for local state calculations
+  const sumByCurrency = (items) => {
+    return items.reduce((acc, item) => {
+      const cur = item.currency || 'AED';
+      acc[cur] = (acc[cur] || 0) + (item.amount || 0);
+      return acc;
+    }, {});
+  };
+
+  const expensesSumByCurrency = sumByCurrency(filteredExpenses);
+  const incomesSumByCurrency  = sumByCurrency(filteredIncomes);
+  const computedBankAccounts = budgetService.getComputedBankAccounts();
+  const bankBalancesSumByCurrency = budgetService.sumBalancesByCurrency();
+
+  // All currencies that have at least one non-zero transaction in the current period OR have a non-zero bank balance
+  const activeCurrenciesForPeriod = Array.from(new Set([
+    ...Object.keys(incomesSumByCurrency),
+    ...Object.keys(expensesSumByCurrency),
+    ...Object.keys(bankBalancesSumByCurrency)
+  ])).filter(cur => 
+    (incomesSumByCurrency[cur] || 0) > 0 || 
+    (expensesSumByCurrency[cur] || 0) > 0 || 
+    (bankBalancesSumByCurrency[cur] || 0) > 0
+  );
+
+  // Fall back to the default currency if nothing has been entered yet
+  const activeCurrencies = activeCurrenciesForPeriod.length > 0
+    ? activeCurrenciesForPeriod
+    : [currencyCode];
+
+  // Calculate balances by currency: cash balance (income - expense) + bank details account balances
+  const balancesByCurrency = activeCurrencies.reduce((acc, cur) => {
+    const inc = incomesSumByCurrency[cur] || 0;
+    const exp = expensesSumByCurrency[cur] || 0;
+    const bankSum = bankBalancesSumByCurrency[cur] || 0;
+    acc[cur] = (inc - exp) + bankSum;
+    return acc;
+  }, {});
+
+  const bankBalancesSumDefault = budgetService.sumBalancesDefaultCurrency(currencyCode);
+
+  const menuItems = [
+    { name: 'Dashboard', icon: LayoutDashboard, color: COLORS.skyBlue },
+    { name: 'Income', icon: CircleDollarSign, color: COLORS.green },
+    { name: 'Expenses', icon: Wallet, color: COLORS.red },
+    { name: 'Bills', icon: Calendar, color: COLORS.purple },
+    { name: 'Budget', icon: Folder, color: COLORS.orange },
+    { name: 'Accounts', icon: Landmark, color: '#0EA5E9' },
+    { name: 'Payees', icon: Users, color: COLORS.green },
+    { name: 'Reports', icon: Presentation, color: COLORS.orange },
+    { name: 'Search', icon: Search, color: COLORS.red },
+  ];
+
+  const handleAddYear = () => {
+    const newYear = window.prompt('Enter new year (e.g. 2027):');
+    if (newYear && !isNaN(newYear) && newYear.length === 4) {
+      if (!years.includes(newYear)) {
+        const updatedYears = [...years, newYear].sort();
+        setYears(updatedYears);
+        setSelectedYear(newYear);
+        setSelectedMonth('Full Year');
+      } else {
+        alert('Year already exists!');
+      }
+    } else if (newYear !== null) {
+      alert('Please enter a valid 4-digit year.');
+    }
+  };
+
+  const handleDeleteYear = () => {
+    if (years.length <= 1) {
+      alert('You must have at least one year.');
+      return;
+    }
+    const confirm = window.confirm(`Are you sure you want to delete the year ${selectedYear}?`);
+    if (confirm) {
+      const updatedYears = years.filter(y => y !== selectedYear);
+      setYears(updatedYears);
+      setSelectedYear(updatedYears[updatedYears.length - 1]);
+    }
+  };
+
+return (
+    <div className="min-h-screen flex font-sans transition-colors duration-300" style={{ backgroundColor: COLORS.bgMain, color: COLORS.textPrimary }}>
+      {/* Sidebar Overlay (mobile) */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-20 lg:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Navigation */}
+      <Sidebar
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        COLORS={COLORS}
+        activeMenu={activeMenu}
+        setActiveMenu={setActiveMenu}
+        menuItems={menuItems}
+      />
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Header */}
+        <header className="h-20 flex items-center justify-between px-6 lg:px-10 shrink-0 border-b transition-colors duration-300" style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border }}>
+          <div className="flex items-center gap-4 lg:hidden mr-4">
+            <button className="p-2 rounded-lg cursor-pointer" onClick={() => setSidebarOpen(true)} style={{ color: COLORS.textSecondary }}>
+              <Menu className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="flex-1 max-w-xl">
+            <div className="flex items-center px-4 py-2 rounded-lg border transition-all" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
+              <Search className="w-4 h-4 mr-3" style={{ color: COLORS.textSecondary }} />
+              <input 
+                type="text" 
+                placeholder="Search reports..." 
+                className="bg-transparent border-none focus:outline-none text-sm w-full"
+                style={{ color: COLORS.textPrimary }}
+              />
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-5 ml-4">
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="transition-colors hover:opacity-80 cursor-pointer" 
+              style={{ color: COLORS.textSecondary }}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5" />}
+            </button>
+
+            <button className="relative transition-colors hover:opacity-80 cursor-pointer" style={{ color: COLORS.textSecondary }}>
+              <Bell className="w-5 h-5" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2" style={{ backgroundColor: COLORS.red, borderColor: COLORS.bgMain }}></span>
+            </button>
+
+            <div className="flex items-center gap-3 pl-4 border-l" style={{ borderColor: COLORS.border }}>
+              <div className="hidden sm:flex flex-col items-end">
+                <span className="text-sm font-bold" style={{ color: COLORS.textPrimary }}>Alex Mercer</span>
+                <span className="text-xs" style={{ color: COLORS.textSecondary }}>Premium User</span>
+              </div>
+              <img src="https://i.pravatar.cc/150?img=11" alt="Profile" className="w-9 h-9 rounded-full object-cover" />
+            </div>
+          </div>
+        </header>
+
+        {/* Dynamic Content Area */}
+        <div className="flex-1 overflow-auto p-6 lg:p-10">
+          {activeMenu === 'Dashboard' ? (
+            <DashboardView
+              COLORS={COLORS}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              years={years}
+              handleAddYear={handleAddYear}
+              handleDeleteYear={handleDeleteYear}
+              ALL_MONTHS={ALL_MONTHS}
+              filteredExpenses={filteredExpenses}
+              filteredIncomes={filteredIncomes}
+              prevExpenses={prevExpenses}
+              prevIncomes={prevIncomes}
+              bankBalancesSumDefault={bankBalancesSumDefault}
+              balancesByCurrency={balancesByCurrency}
+              activeCurrencies={activeCurrencies}
+              currencies={currencies}
+              categories={categories}
+              INCOME_CATEGORIES={INCOME_CATEGORIES}
+              isDarkMode={isDarkMode}
+            />
+          ) : activeMenu === 'Expenses' ? (
+            <ExpensesView
+              COLORS={COLORS}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              years={years}
+              ALL_MONTHS={ALL_MONTHS}
+              setFormType={setFormType}
+              setFormDate={setFormDate}
+              categories={categories}
+              setFormCategory={setFormCategory}
+              setFormSubcategory={setFormSubcategory}
+              setFormAmount={setFormAmount}
+              setFormPayFrom={setFormPayFrom}
+              setFormBankName={setFormBankName}
+              setFormNotes={setFormNotes}
+              setEditingExpenseId={setEditingExpenseId}
+              setIsAddExpenseOpen={setIsAddExpenseOpen}
+              activeCurrencies={activeCurrencies}
+              currencies={currencies}
+              filteredExpenses={filteredExpenses}
+              isDarkMode={isDarkMode}
+              handleEditExpense={handleEditExpense}
+              handleDeleteExpense={handleDeleteExpense}
+            />
+          ) : activeMenu === 'Income' ? (
+            <IncomeView
+              COLORS={COLORS}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              years={years}
+              ALL_MONTHS={ALL_MONTHS}
+              setFormType={setFormType}
+              setFormDate={setFormDate}
+              setFormCategory={setFormCategory}
+              setFormSubcategory={setFormSubcategory}
+              setFormAmount={setFormAmount}
+              setFormPayFrom={setFormPayFrom}
+              setFormBankName={setFormBankName}
+              setFormNotes={setFormNotes}
+              setEditingExpenseId={setEditingExpenseId}
+              setIsAddExpenseOpen={setIsAddExpenseOpen}
+              activeCurrencies={activeCurrencies}
+              currencies={currencies}
+              filteredIncomes={filteredIncomes}
+              INCOME_CATEGORIES={INCOME_CATEGORIES}
+              isDarkMode={isDarkMode}
+              handleEditIncome={handleEditIncome}
+              handleDeleteIncome={handleDeleteIncome}
+            />
+          ) : activeMenu === 'Accounts' ? (
+            <AccountsView
+              COLORS={COLORS}
+              setEditingBankAccountId={setEditingBankAccountId}
+              setBankFormName={setBankFormName}
+              setBankFormType={setBankFormType}
+              setBankFormCurrency={setBankFormCurrency}
+              setBankFormBalance={setBankFormBalance}
+              setBankFormLimit={setBankFormLimit}
+              setBankFormRemainingLimit={setBankFormRemainingLimit}
+              setIsBankModalOpen={setIsBankModalOpen}
+              computedBankAccounts={computedBankAccounts}
+              currencies={currencies}
+              handleEditBankAccount={handleEditBankAccount}
+              handleDeleteBankAccount={handleDeleteBankAccount}
+            />
+          ) : (
+            <div className="max-w-7xl mx-auto text-left">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight" style={{ color: COLORS.textPrimary }}>{activeMenu}</h1>
+                  <p className="text-sm mt-1" style={{ color: COLORS.textSecondary }}>Manage your {activeMenu.toLowerCase()} here.</p>
+                </div>
+              </div>
+              <div className="mt-8 p-12 text-center rounded-2xl border" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgCard }}>
+                <Folder className="w-12 h-12 mx-auto mb-4 opacity-40" />
+                <h3 className="text-lg font-semibold" style={{ color: COLORS.textPrimary }}>Under Development</h3>
+                <p className="text-sm mt-2" style={{ color: COLORS.textSecondary, opacity: 0.7 }}>Content for {activeMenu} will be added here soon.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Modular Modals */}
+      <TransactionModal
+        isAddExpenseOpen={isAddExpenseOpen}
+        setIsAddExpenseOpen={setIsAddExpenseOpen}
+        formType={formType}
+        editingExpenseId={editingExpenseId}
+        setEditingExpenseId={setEditingExpenseId}
+        handleSaveExpense={handleSaveExpense}
+        formDate={formDate}
+        setFormDate={setFormDate}
+        formCategory={formCategory}
+        setFormCategory={setFormCategory}
+        INCOME_CATEGORIES={INCOME_CATEGORIES}
+        categories={categories}
+        formSubcategory={formSubcategory}
+        setFormSubcategory={setFormSubcategory}
+        setIsCategoriesManagerOpen={setIsCategoriesManagerOpen}
+        handleOpenSubCategoriesManager={handleOpenSubCategoriesManager}
+        formAmount={formAmount}
+        setFormAmount={setFormAmount}
+        formCurrency={formCurrency}
+        setFormCurrency={setFormCurrency}
+        currencies={currencies}
+        setIsCurrencyManagerOpen={setIsCurrencyManagerOpen}
+        formPayFrom={formPayFrom}
+        setFormPayFrom={setFormPayFrom}
+        formBankName={formBankName}
+        setFormBankName={setFormBankName}
+        formSelectedAccountDetails={formSelectedAccountDetails}
+        setFormSelectedAccountDetails={setFormSelectedAccountDetails}
+        computedBankAccounts={computedBankAccounts}
+        formNotes={formNotes}
+        setFormNotes={setFormNotes}
+      />
+
+      <BankModal
+        isBankModalOpen={isBankModalOpen}
+        setIsBankModalOpen={setIsBankModalOpen}
+        editingBankAccountId={editingBankAccountId}
+        setEditingBankAccountId={setEditingBankAccountId}
+        handleSaveBankAccount={handleSaveBankAccount}
+        bankFormCountry={bankFormCountry}
+        setBankFormCountry={setBankFormCountry}
+        bankFormName={bankFormName}
+        setBankFormName={setBankFormName}
+        bankFormType={bankFormType}
+        setBankFormType={setBankFormType}
+        bankFormCurrency={bankFormCurrency}
+        setBankFormCurrency={setBankFormCurrency}
+        bankFormBranch={bankFormBranch}
+        setBankFormBranch={setBankFormBranch}
+        bankFormLimit={bankFormLimit}
+        setBankFormLimit={setBankFormLimit}
+        bankFormRemainingLimit={bankFormRemainingLimit}
+        setBankFormRemainingLimit={setBankFormRemainingLimit}
+        bankFormAccountNumbers={bankFormAccountNumbers}
+        setBankFormAccountNumbers={setBankFormAccountNumbers}
+        bankFormBalances={bankFormBalances}
+        setBankFormBalances={setBankFormBalances}
+        showAddCustomBank={showAddCustomBank}
+        setShowAddCustomBank={setShowAddCustomBank}
+        showAddCustomType={showAddCustomType}
+        setShowAddCustomType={setShowAddCustomType}
+        showAddCustomBranch={showAddCustomBranch}
+        setShowAddCustomBranch={setShowAddCustomBranch}
+        newCustomBankName={newCustomBankName}
+        setNewCustomBankName={setNewCustomBankName}
+        newCustomTypeName={newCustomTypeName}
+        setNewCustomTypeName={setNewCustomTypeName}
+        newCustomBranchName={newCustomBranchName}
+        setNewCustomBranchName={setNewCustomBranchName}
+        customBanks={customBanks}
+        setCustomBanks={setCustomBanks}
+        customAccountTypes={customAccountTypes}
+        setCustomAccountTypes={setCustomAccountTypes}
+        customBranches={customBranches}
+        setCustomBranches={setCustomBranches}
+        currencies={currencies}
+      />
+
+      <CurrencyManagerModal
+        isCurrencyManagerOpen={isCurrencyManagerOpen}
+        setIsCurrencyManagerOpen={setIsCurrencyManagerOpen}
+        selectedCurrencyToAdd={selectedCurrencyToAdd}
+        setSelectedCurrencyToAdd={setSelectedCurrencyToAdd}
+        ALL_CURRENCIES={ALL_CURRENCIES}
+        currencies={currencies}
+        setCurrencies={setCurrencies}
+        formCurrency={formCurrency}
+        setFormCurrency={setFormCurrency}
+      />
+
+      <CategoryManagerModal
+        isCategoriesManagerOpen={isCategoriesManagerOpen}
+        setIsCategoriesManagerOpen={setIsCategoriesManagerOpen}
+        categories={categories}
+        setCategories={setCategories}
+        handleDeleteCategory={handleDeleteCategory}
+        handleStartEditCategory={handleStartEditCategory}
+        handleOpenSubCategoriesManager={handleOpenSubCategoriesManager}
+        isAddCategoryOpen={isAddCategoryOpen}
+        setIsAddCategoryOpen={setIsAddCategoryOpen}
+        newCategoryName={newCategoryName}
+        setNewCategoryName={setNewCategoryName}
+        newCategoryIcon={newCategoryIcon}
+        setNewCategoryIcon={setNewCategoryIcon}
+        handleSaveNewCategory={handleSaveNewCategory}
+        isEditCategoryOpen={isEditCategoryOpen}
+        setIsEditCategoryOpen={setIsEditCategoryOpen}
+        editingCategory={editingCategory}
+        setEditingCategory={setEditingCategory}
+        editCategoryName={editCategoryName}
+        setEditCategoryName={setEditCategoryName}
+        editCategoryIcon={editCategoryIcon}
+        setEditCategoryIcon={setEditCategoryIcon}
+        handleSaveCategoryEdit={handleSaveCategoryEdit}
+        isSubCategoriesManagerOpen={isSubCategoriesManagerOpen}
+        setIsSubCategoriesManagerOpen={setIsSubCategoriesManagerOpen}
+        activeParentCategory={activeParentCategory}
+        setActiveParentCategory={setActiveParentCategory}
+        isAddSubCategoryOpen={isAddSubCategoryOpen}
+        setIsAddSubCategoryOpen={setIsAddSubCategoryOpen}
+        newSubCategoryName={newSubCategoryName}
+        setNewSubCategoryName={setNewSubCategoryName}
+        newSubCategoryIcon={newSubCategoryIcon}
+        setNewSubCategoryIcon={setNewSubCategoryIcon}
+        handleSaveNewSubCategory={handleSaveNewSubCategory}
+        isEditSubCategoryOpen={isEditSubCategoryOpen}
+        setIsEditSubCategoryOpen={setIsEditSubCategoryOpen}
+        editingSubCategory={editingSubCategory}
+        setEditingSubCategory={setEditingSubCategory}
+        editSubCategoryName={editSubCategoryName}
+        setEditSubCategoryName={setEditSubCategoryName}
+        editSubCategoryIcon={editSubCategoryIcon}
+        setEditSubCategoryIcon={setEditSubCategoryIcon}
+        handleSaveEditSubCategory={handleSaveEditSubCategory}
+        handleDeleteSubCategory={handleDeleteSubCategory}
+        handleStartAddSubCategory={handleStartAddSubCategory}
+        AVAILABLE_ICONS={AVAILABLE_ICONS}
+        Star={Star}
+      />
+    </div>
+  );
+};
+
+export default Dashboard;
