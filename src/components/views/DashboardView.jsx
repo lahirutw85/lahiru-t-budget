@@ -696,13 +696,14 @@ export const DashboardView = ({
                 <th className="pb-3 px-4 font-bold">Date</th>
                 <th className="pb-3 px-4 font-bold">Description</th>
                 <th className="pb-3 px-4 font-bold">Category</th>
+                <th className="pb-3 px-4 font-bold">Account Details</th>
                 <th className="pb-3 px-4 font-bold text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="py-6 text-center font-medium" style={{ color: COLORS.textSecondary }}>
+                  <td colSpan="5" className="py-6 text-center font-medium" style={{ color: COLORS.textSecondary }}>
                     No recent expenses entered.
                   </td>
                 </tr>
@@ -720,6 +721,15 @@ export const DashboardView = ({
                         >
                           {exp.category}
                         </span>
+                      </td>
+                      <td className="py-4 px-4 text-xs font-semibold" style={{ color: COLORS.textSecondary }}>
+                        {exp.account === 'Cash' ? (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-wider text-[10px] font-bold">Cash</span>
+                        ) : (
+                          <span className="truncate max-w-[250px] block" title={exp.bankName}>
+                            {exp.bankName || exp.account || 'Cash'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-4 font-bold text-right" style={{ color: COLORS.red }}>
                         - {formatCurrencyLocal(exp.amount, exp.currency || 'AED')}
