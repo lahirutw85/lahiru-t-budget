@@ -94,6 +94,7 @@ import { ALL_CURRENCIES, EXCHANGE_RATES } from '../constants/currencies';
 import { SRI_LANKA_BANKS, UAE_BANKS, SRI_LANKA_BRANCHES, UAE_BRANCHES } from '../constants/banks';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
 import { convertCurrency } from '../utils/currencyUtils';
+import { fetchExpenses, fetchIncomes, fetchBankAccounts, syncExpenses, syncIncomes } from '../utils/dataSync';
 
 
 
@@ -160,92 +161,53 @@ const Dashboard = () => {
   const [incomes,   setIncomes]   = useState([]);
   const [formType,  setFormType]  = useState('expense'); // 'expense' | 'income'
 
-  const getApiBase = () => {
-    return localStorage.getItem('budget_api_url') || 'http://localhost:5000/api';
-  };
-
+  // ── §7b: STARTUP DATA FETCH FROM GOOGLE SHEETS (cloud) ────────
+  // On mount, fetch all data from Google Apps Script Web App.
+  // Falls back to localStorage if the cloud is unreachable.
   useEffect(() => {
-    const fetchExpenses = async () => {
-      try {
-        const res = await fetch(`${getApiBase()}/expenses`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            const hydrated = data.map(exp => ({
-              ...exp,
-              icon: getIconForCategory(exp.category)
-            }));
-            setExpenses(hydrated);
-            localStorage.setItem('budget_expenses', JSON.stringify(hydrated));
+    const loadAll = async () => {
+      // 1. Expenses
+      const expData = await fetchExpenses();
+      if (expData.length > 0) {
+        const hydrated = expData.map(exp => ({ ...exp, icon: getIconForCategory(exp.category) }));
+        setExpenses(hydrated);
+        const uniqueYears = Array.from(new Set(hydrated.map(e => e.date?.split('-')[0]).filter(Boolean)));
+        const currentYear = new Date().getFullYear().toString();
+        if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
+        setYears(uniqueYears.sort((a, b) => b - a));
+      }
 
-            const uniqueYears = Array.from(new Set(hydrated.map(exp => exp.date?.split('-')[0]).filter(Boolean)));
-            const currentYear = new Date().getFullYear().toString();
-            if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
-            setYears(uniqueYears.sort((a, b) => b - a));
+      // 2. Incomes
+      const incData = await fetchIncomes();
+      if (incData.length > 0) {
+        const hydrated = incData.map(inc => ({ ...inc, icon: getIconForCategory(inc.category) }));
+        setIncomes(hydrated);
+      }
+
+      // 3. Bank Accounts
+      const bankData = await fetchBankAccounts();
+      if (bankData !== null && bankData.length > 0) {
+        setBankAccounts(bankData.map(b => {
+          if (b.accountType !== 'Credit Card') {
+            return {
+              ...b,
+              accountNumbers: Array.isArray(b.accountNumbers) && b.accountNumbers.length > 0 ? b.accountNumbers : [''],
+              balances: Array.isArray(b.balances) && b.balances.length > 0 ? b.balances : [parseFloat(b.balance) || 0],
+            };
           }
-        } else {
-          const cached = localStorage.getItem('budget_expenses');
-          if (cached) setExpenses(JSON.parse(cached));
-        }
-      } catch (err) {
-        console.warn('API unavailable, falling back to LocalStorage cache:', err);
-        const cached = localStorage.getItem('budget_expenses');
-        if (cached) setExpenses(JSON.parse(cached));
+          return b;
+        }));
       }
     };
-
-    const fetchIncomes = async () => {
-      try {
-        const res = await fetch(`${getApiBase()}/incomes`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            const hydrated = data.map(inc => ({
-              ...inc,
-              icon: getIconForCategory(inc.category)
-            }));
-            setIncomes(hydrated);
-            localStorage.setItem('budget_incomes', JSON.stringify(hydrated));
-          }
-        } else {
-          const cached = localStorage.getItem('budget_incomes');
-          if (cached) setIncomes(JSON.parse(cached));
-        }
-      } catch (err) {
-        console.warn('API unavailable, falling back to LocalStorage cache:', err);
-        const cached = localStorage.getItem('budget_incomes');
-        if (cached) setIncomes(JSON.parse(cached));
-      }
-    };
-
-    fetchExpenses();
-    fetchIncomes();
+    loadAll();
   }, []);
 
   const syncExpensesToDatabase = async (updatedExpenses) => {
-    localStorage.setItem('budget_expenses', JSON.stringify(updatedExpenses));
-    try {
-      await fetch(`${getApiBase()}/expenses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expenses: updatedExpenses })
-      });
-    } catch (err) {
-      console.warn('Could not sync to Google Sheets, saved to local cache:', err);
-    }
+    await syncExpenses(updatedExpenses);
   };
 
   const syncIncomesToDatabase = async (updatedIncomes) => {
-    localStorage.setItem('budget_incomes', JSON.stringify(updatedIncomes));
-    try {
-      await fetch(`${getApiBase()}/incomes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incomes: updatedIncomes })
-      });
-    } catch (err) {
-      console.warn('Could not sync incomes to Google Sheets, saved to local cache:', err);
-    }
+    await syncIncomes(updatedIncomes);
   };
 
   // Add / Edit Expense+Income modal — open/close flag

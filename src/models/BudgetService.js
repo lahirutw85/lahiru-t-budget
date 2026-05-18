@@ -9,7 +9,7 @@
 
 import { Transaction } from './Transaction';
 import { BankAccount } from './BankAccount';
-import { syncExpenses, syncIncomes } from '../utils/dataSync';
+import { syncExpenses, syncIncomes, syncBankAccounts } from '../utils/dataSync';
 
 export class BudgetService {
   /**
@@ -153,7 +153,9 @@ export class BudgetService {
       updated = [...this.bankAccounts, newBank];
     }
     this.bankAccounts = updated;
-    localStorage.setItem('budget_bank_accounts', JSON.stringify(updated.map(b => b.toJSON())));
+    const serialized = updated.map(b => b.toJSON());
+    localStorage.setItem('budget_bank_accounts', JSON.stringify(serialized));
+    syncBankAccounts(serialized);
     return newBank;
   }
 
@@ -166,6 +168,8 @@ export class BudgetService {
   deleteBankAccount(id) {
     const updated = this.bankAccounts.filter(b => b.id !== id);
     this.bankAccounts = updated;
-    localStorage.setItem('budget_bank_accounts', JSON.stringify(updated.map(b => b.toJSON())));
+    const serialized = updated.map(b => b.toJSON());
+    localStorage.setItem('budget_bank_accounts', JSON.stringify(serialized));
+    syncBankAccounts(serialized);
   }
 }
