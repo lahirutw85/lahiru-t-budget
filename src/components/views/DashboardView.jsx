@@ -216,7 +216,8 @@ export const DashboardView = ({
   const savingsAllocations = Object.entries(balancesByCurrency).map(([cur, bal]) => {
     return {
       name: `${cur} Savings`,
-      amount: bal
+      amount: bal,
+      currency: cur
     };
   });
 
@@ -566,7 +567,7 @@ export const DashboardView = ({
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.skyBlue }}></div>
                     <span style={{ color: COLORS.textPrimary }}>{item.name}</span>
                   </div>
-                  <span style={{ color: COLORS.textPrimary }}>{formatCurrencyLocal(item.amount, currencyCode)}</span>
+                  <span style={{ color: COLORS.textPrimary }}>{formatCurrencyLocal(item.amount, item.currency)}</span>
                 </div>
               ))}
             </div>
