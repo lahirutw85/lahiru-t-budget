@@ -227,9 +227,12 @@ export const DashboardView = ({
   });
 
   // ─── 4. SUB-RENDER HELPER FUNCTIONS ───────────────────────
-  const renderMultiCurrencySum = (sumMap, defaultColorStyle = {}) => {
-    if (activeCurrencies.length <= 1) {
-      const cur = activeCurrencies[0];
+  const renderMultiCurrencySum = (sumMap, defaultColorStyle = {}, showZero = false) => {
+    const nonemptyCurrencies = activeCurrencies.filter(cur => showZero || (sumMap[cur] || 0) !== 0);
+    const displayCurrencies = nonemptyCurrencies.length > 0 ? nonemptyCurrencies : [activeCurrencies[0]];
+
+    if (displayCurrencies.length <= 1) {
+      const cur = displayCurrencies[0];
       const val = sumMap[cur] || 0;
       return (
         <div className="text-2xl font-bold" style={defaultColorStyle}>
@@ -240,7 +243,7 @@ export const DashboardView = ({
 
     return (
       <div className="space-y-1.5 mt-2 max-h-[110px] overflow-y-auto pr-1">
-        {activeCurrencies.map(cur => {
+        {displayCurrencies.map(cur => {
           const val = sumMap[cur] || 0;
           return (
             <div key={cur} className="flex justify-between items-center text-sm font-bold border-b border-white/5 pb-0.5" style={defaultColorStyle}>
@@ -465,7 +468,7 @@ export const DashboardView = ({
             </div>
             <h3 className="text-xs font-medium mb-1" style={{ color: COLORS.textSecondary }}>In Hand (Balance)</h3>
           </div>
-          {renderMultiCurrencySum(balancesByCurrency, { color: COLORS.yellow })}
+          {renderMultiCurrencySum(balancesByCurrency, { color: COLORS.yellow }, true)}
         </div>
 
         {/* Highest Expense */}
