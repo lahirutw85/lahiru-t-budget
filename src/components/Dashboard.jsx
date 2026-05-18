@@ -161,6 +161,8 @@ const Dashboard = () => {
   const [incomes,   setIncomes]   = useState([]);
   const [formType,  setFormType]  = useState('expense'); // 'expense' | 'income'
 
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+
   // ── §7b: STARTUP DATA FETCH FROM GOOGLE SHEETS (cloud) ────────
   // On mount, fetch all data from Google Apps Script Web App.
   // Falls back to localStorage if the cloud is unreachable.
@@ -208,6 +210,7 @@ const Dashboard = () => {
         if (Array.isArray(settingsData.customAccountTypes)) setCustomAccountTypes(settingsData.customAccountTypes);
         if (Array.isArray(settingsData.customBranches)) setCustomBranches(settingsData.customBranches);
       }
+      setIsDataLoaded(true);
     };
     loadAll();
   }, []);
@@ -270,8 +273,9 @@ const Dashboard = () => {
 
   // Persist currencies whenever the list changes (Google Sheets cloud)
   useEffect(() => {
+    if (!isDataLoaded) return;
     syncCurrencies(currencies);
-  }, [currencies]);
+  }, [currencies, isDataLoaded]);
 
   // Bank Accounts — persisted to cloud
   // Structure of each account:
@@ -300,8 +304,9 @@ const Dashboard = () => {
 
   // Persist bank accounts whenever the list changes (Google Sheets cloud)
   useEffect(() => {
+    if (!isDataLoaded) return;
     syncBankAccounts(bankAccounts);
-  }, [bankAccounts]);
+  }, [bankAccounts, isDataLoaded]);
 
   // Bank Account MODAL state — open/close + which record is being edited
   const [isBankModalOpen,      setIsBankModalOpen]      = useState(false);
@@ -334,12 +339,13 @@ const Dashboard = () => {
 
   // Persist all custom bank lists to settings sheet in cloud
   useEffect(() => {
+    if (!isDataLoaded) return;
     syncSettings({
       customBanks,
       customAccountTypes,
       customBranches
     });
-  }, [customBanks, customAccountTypes, customBranches]);
+  }, [customBanks, customAccountTypes, customBranches, isDataLoaded]);
 
   // Inline "Add custom" input visibility toggles + their text values
   const [showAddCustomBank,   setShowAddCustomBank]   = useState(false);
