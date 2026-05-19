@@ -1,39 +1,151 @@
-import React from 'react';
+import { useState } from 'react';
 import { X, Save, Plus, Settings, Paperclip, Calendar } from 'lucide-react';
 
 export const TransactionModal = ({
   isAddExpenseOpen,
   setIsAddExpenseOpen,
   formType,
-  editingExpenseId,
-  setEditingExpenseId,
-  handleSaveExpense,
-  formDate,
-  setFormDate,
-  formCategory,
-  setFormCategory,
+  editingTransaction,
+  onSave,
   INCOME_CATEGORIES,
   categories,
-  formSubcategory,
-  setFormSubcategory,
   setIsCategoriesManagerOpen,
   handleOpenSubCategoriesManager,
-  formAmount,
-  setFormAmount,
-  formCurrency,
-  setFormCurrency,
   currencies,
   setIsCurrencyManagerOpen,
-  formPayFrom,
-  setFormPayFrom,
-  formBankName,
-  setFormBankName,
-  formSelectedAccountDetails,
-  setFormSelectedAccountDetails,
-  computedBankAccounts,
-  formNotes,
-  setFormNotes
+  computedBankAccounts
 }) => {
+  // Active categories list based on transaction type
+  const activeCategories = formType === 'income' ? INCOME_CATEGORIES : categories;
+  const defaultCategory = activeCategories[0]?.name || '';
+  const defaultSubcategory = activeCategories[0]?.subCategories?.[0]?.name || 'General';
+
+  const getParsedBankDetails = () => {
+    let bankPart = editingTransaction?.bankName || '';
+    let detailPart = '';
+    if (bankPart.includes(' (')) {
+      const parts = bankPart.split(' (');
+      bankPart = parts[0];
+      detailPart = parts[1].replace(')', '');
+    }
+    return { bankPart, detailPart };
+  };
+
+  const parsedBank = getParsedBankDetails();
+
+  const [formDate, setFormDate] = useState(editingTransaction?.date || new Date().toISOString().split('T')[0]);
+  const [formCategory, setFormCategory] = useState(editingTransaction?.category || defaultCategory);
+  const [formSubcategory, setFormSubcategory] = useState(editingTransaction?.subCategory || defaultSubcategory);
+  const [formAmount, setFormAmount] = useState(editingTransaction?.amount ? editingTransaction.amount.toString() : '');
+  const [formCurrency, setFormCurrency] = useState(editingTransaction?.currency || 'AED');
+  const [formPayFrom, setFormPayFrom] = useState(editingTransaction?.account || 'Bank Account');
+  const [formBankName, setFormBankName] = useState(parsedBank.bankPart);
+  const [formSelectedAccountDetails, setFormSelectedAccountDetails] = useState(parsedBank.detailPart);
+  const [formNotes, setFormNotes] = useState(editingTransaction?.notes || '');
+
+  // Render-time fallbacks to sync external list changes without useEffect
+  const currentCurrencyCode = currencies.some(c => c.code === formCurrency)
+    ? formCurrency
+    : (currencies[0]?.code || 'AED');
+
+  const currentCategoryName = activeCategories.some(c => c.name === formCategory)
+    ? formCategory
+    : (activeCategories[0]?.name || '');
+
+  const currentCategoryObj = activeCategories.find(c => c.name === currentCategoryName);
+  const currentSubcategoryName = currentCategoryObj?.subCategories?.some(s => s.name === formSubcategory)
+    ? formSubcategory
+    : (currentCategoryObj?.subCategories?.[0]?.name || 'General');
+
+  const handleCategoryChange = (selectedCatName) => {
+    setFormCategory(selectedCatName);
+    const catObj = activeCategories.find(c => c.name === selectedCatName);
+    if (catObj && catObj.subCategories && catObj.subCategories.length > 0) {
+      setFormSubcategory(catObj.subCategories[0].name);
+    } else {
+      setFormSubcategory('General');
+    }
+  };
+
+  const handlePayFromChange = (val) => {
+    setFormPayFrom(val);
+    if (val !== 'Bank Account' && val !== 'Credit Card') {
+      setFormBankName('');
+      setFormSelectedAccountDetails('');
+    }
+  };
+
+  const handleBankNameChange = (val, finalAccounts) => {
+    setFormBankName(val);
+    const matches = finalAccounts.filter(acc => acc.bankName === val);
+    if (matches.length === 1) {
+      const acc = matches[0];
+      let detailLabel = acc.accountType;
+      if (acc.branch) detailLabel += ` - ${acc.branch}`;
+      if (acc.accountType !== 'Credit Card' && acc.accountNumbers && acc.accountNumbers.length > 0 && acc.accountNumbers[0]) {
+        detailLabel += ` - Acc: ${acc.accountNumbers[0]}`;
+      }
+      setFormSelectedAccountDetails(detailLabel);
+      if (acc.currency) {
+        setFormCurrency(acc.currency);
+      }
+    } else if (matches.length > 1) {
+      setFormSelectedAccountDetails('');
+      if (matches[0].currency) {
+        setFormCurrency(matches[0].currency);
+      }
+    } else {
+      setFormSelectedAccountDetails('');
+    }
+  };
+
+  const handleDetailsChange = (val, matchingDetails) => {
+    setFormSelectedAccountDetails(val);
+    const matchedAcc = matchingDetails.find(acc => {
+      let detailVal = acc.accountType;
+      if (acc.branch) detailVal += ` - ${acc.branch}`;
+      if (acc.accountType !== 'Credit Card' && acc.accountNumbers && acc.accountNumbers.length > 0) {
+        return acc.accountNumbers.some(no => {
+          let checkVal = `${detailVal} - Acc: ${no}`;
+          return checkVal === val;
+        });
+      }
+      return detailVal === val;
+    });
+    if (matchedAcc && matchedAcc.currency) {
+      setFormCurrency(matchedAcc.currency);
+    }
+  };
+
+  const handleSave = () => {
+    if (!formAmount || isNaN(formAmount) || parseFloat(formAmount) <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+
+    let savedBankName = formBankName;
+    if ((formPayFrom === 'Bank Account' || formPayFrom === 'Credit Card') && formBankName) {
+      if (formSelectedAccountDetails) {
+        savedBankName = `${formBankName} (${formSelectedAccountDetails})`;
+      }
+    }
+
+    onSave({
+      date: formDate,
+      category: currentCategoryName,
+      subCategory: currentSubcategoryName,
+      amount: parseFloat(formAmount),
+      currency: currentCurrencyCode,
+      account: formPayFrom || 'Cash',
+      bankName: (formPayFrom === 'Bank Account' || formPayFrom === 'Credit Card') ? savedBankName : '',
+      notes: formNotes
+    });
+  };
+
+  const handleClose = () => {
+    setIsAddExpenseOpen(false);
+  };
+
   if (!isAddExpenseOpen) return null;
 
   return (
@@ -42,22 +154,17 @@ export const TransactionModal = ({
         {/* Modal Header */}
         <div className="bg-[#374151] px-6 py-4 flex items-center justify-between text-white border-b border-gray-600">
           <button 
-            onClick={() => {
-              setIsAddExpenseOpen(false);
-              setEditingExpenseId(null);
-              setFormAmount('');
-              setFormNotes('');
-            }} 
+            onClick={handleClose} 
             className="hover:opacity-80 transition-opacity"
           >
             <X className="w-7 h-7 bg-gray-500 rounded-full p-1" />
           </button>
           <h2 className="text-xl font-bold text-center flex-1" style={{ color: '#4FD1F5' }}>
             {formType === 'income' 
-              ? (editingExpenseId ? 'Edit Income' : 'Add Income') 
-              : (editingExpenseId ? 'Edit Expense' : 'Add Expense')}
+              ? (editingTransaction ? 'Edit Income' : 'Add Income') 
+              : (editingTransaction ? 'Edit Expense' : 'Add Expense')}
           </h2>
-          <button onClick={handleSaveExpense} className="hover:opacity-80 transition-opacity">
+          <button onClick={handleSave} className="hover:opacity-80 transition-opacity">
             <Save className="w-7 h-7 text-[#4FD1F5]" />
           </button>
         </div>
@@ -82,21 +189,11 @@ export const TransactionModal = ({
             <label className="w-24 text-sm font-bold text-gray-700">Category</label>
             <div className="flex-1 flex items-center gap-2">
               <select 
-                value={formCategory}
-                onChange={(e) => {
-                  const selectedCatName = e.target.value;
-                  setFormCategory(selectedCatName);
-                  const activeList = formType === 'income' ? INCOME_CATEGORIES : categories;
-                  const catObj = activeList.find(c => c.name === selectedCatName);
-                  if (catObj && catObj.subCategories && catObj.subCategories.length > 0) {
-                    setFormSubcategory(catObj.subCategories[0].name);
-                  } else {
-                    setFormSubcategory('General');
-                  }
-                }}
+                value={currentCategoryName}
+                onChange={(e) => handleCategoryChange(e.target.value)}
                 className="flex-1 bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700"
               >
-                {(formType === 'income' ? INCOME_CATEGORIES : categories).map(cat => (
+                {activeCategories.map(cat => (
                   <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
               </select>
@@ -117,11 +214,11 @@ export const TransactionModal = ({
             <label className="w-24 text-sm font-bold text-gray-700">Subcategory</label>
             <div className="flex-1 flex items-center gap-2">
               <select 
-                value={formSubcategory}
+                value={currentSubcategoryName}
                 onChange={(e) => setFormSubcategory(e.target.value)}
                 className="flex-1 bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700"
               >
-                {(formType === 'income' ? INCOME_CATEGORIES : categories).find(c => c.name === formCategory)?.subCategories?.map(sub => (
+                {currentCategoryObj?.subCategories?.map(sub => (
                   <option key={sub.id} value={sub.name}>{sub.name}</option>
                 )) || <option value="General">General</option>}
               </select>
@@ -129,7 +226,7 @@ export const TransactionModal = ({
                 <button 
                   type="button"
                   onClick={() => {
-                    const catObj = categories.find(c => c.name === formCategory);
+                    const catObj = categories.find(c => c.name === currentCategoryName);
                     if (catObj) {
                       handleOpenSubCategoriesManager(catObj);
                     }
@@ -155,7 +252,7 @@ export const TransactionModal = ({
               />
               <div className="flex items-center gap-1">
                 <select
-                  value={formCurrency}
+                  value={currentCurrencyCode}
                   onChange={(e) => setFormCurrency(e.target.value)}
                   className="bg-white border border-gray-300 rounded px-2 py-2 shadow-sm text-sm font-bold text-gray-700 focus:outline-none cursor-pointer"
                 >
@@ -166,7 +263,7 @@ export const TransactionModal = ({
                 <button
                   type="button"
                   onClick={() => setIsCurrencyManagerOpen(true)}
-                  className="p-2 bg-gray-300 hover:bg-gray-400 rounded transition-colors text-gray-700 animate-pulse"
+                  className="p-2 bg-gray-300 hover:bg-gray-400 rounded transition-colors text-gray-700"
                   title="Manage Currencies"
                 >
                   <Settings className="w-4 h-4" />
@@ -175,20 +272,13 @@ export const TransactionModal = ({
             </div>
           </div>
 
-
           {/* Pay from / Received in */}
           <div className="flex items-center gap-4">
             <label className="w-24 text-sm font-bold text-gray-700">{formType === 'income' ? 'Received in' : 'Pay from'}</label>
             <div className="flex-1 flex items-center gap-2">
               <select 
                 value={formPayFrom}
-                onChange={(e) => {
-                  setFormPayFrom(e.target.value);
-                  if (e.target.value !== 'Bank Account' && e.target.value !== 'Credit Card') {
-                    setFormBankName('');
-                    setFormSelectedAccountDetails('');
-                  }
-                }}
+                onChange={(e) => handlePayFromChange(e.target.value)}
                 className="flex-1 bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700"
               >
                 <option value="">-- Optional --</option>
@@ -231,29 +321,7 @@ export const TransactionModal = ({
                   <div className="flex-1">
                     <select
                       value={formBankName}
-                      onChange={(e) => {
-                        setFormBankName(e.target.value);
-                        const matches = finalAccounts.filter(acc => acc.bankName === e.target.value);
-                        if (matches.length === 1) {
-                          const acc = matches[0];
-                          let detailLabel = acc.accountType;
-                          if (acc.branch) detailLabel += ` - ${acc.branch}`;
-                          if (acc.accountType !== 'Credit Card' && acc.accountNumbers && acc.accountNumbers.length > 0 && acc.accountNumbers[0]) {
-                            detailLabel += ` - Acc: ${acc.accountNumbers[0]}`;
-                          }
-                          setFormSelectedAccountDetails(detailLabel);
-                          if (acc.currency) {
-                            setFormCurrency(acc.currency);
-                          }
-                        } else if (matches.length > 1) {
-                          setFormSelectedAccountDetails('');
-                          if (matches[0].currency) {
-                            setFormCurrency(matches[0].currency);
-                          }
-                        } else {
-                          setFormSelectedAccountDetails('');
-                        }
-                      }}
+                      onChange={(e) => handleBankNameChange(e.target.value, finalAccounts)}
                       className="w-full bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700 font-medium"
                     >
                       <option value="">-- Select Bank --</option>
@@ -273,24 +341,7 @@ export const TransactionModal = ({
                     <div className="flex-1">
                       <select
                         value={formSelectedAccountDetails}
-                        onChange={(e) => {
-                          setFormSelectedAccountDetails(e.target.value);
-                          const selectedVal = e.target.value;
-                          const matchedAcc = matchingDetails.find(acc => {
-                            let detailVal = acc.accountType;
-                            if (acc.branch) detailVal += ` - ${acc.branch}`;
-                            if (acc.accountType !== 'Credit Card' && acc.accountNumbers && acc.accountNumbers.length > 0) {
-                              return acc.accountNumbers.some(no => {
-                                let checkVal = `${detailVal} - Acc: ${no}`;
-                                return checkVal === selectedVal;
-                              });
-                            }
-                            return detailVal === selectedVal;
-                          });
-                          if (matchedAcc && matchedAcc.currency) {
-                            setFormCurrency(matchedAcc.currency);
-                          }
-                        }}
+                        onChange={(e) => handleDetailsChange(e.target.value, matchingDetails)}
                         className="w-full bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700 font-medium"
                       >
                         <option value="">-- Select Details --</option>

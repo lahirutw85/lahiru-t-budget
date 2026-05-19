@@ -69,7 +69,6 @@ export class BankAccount {
 
     const processTransaction = (tx, type) => {
       if (tx.bankName && (tx.account === 'Bank Account' || tx.account === 'Credit Card')) {
-        let expected = this.bankName;
         let detailVal = this.accountType;
         if (this.branch) detailVal += ` - ${this.branch}`;
         

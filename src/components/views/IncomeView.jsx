@@ -12,13 +12,6 @@ export const IncomeView = ({
   years,
   ALL_MONTHS,
   setFormType,
-  setFormDate,
-  setFormCategory,
-  setFormSubcategory,
-  setFormAmount,
-  setFormPayFrom,
-  setFormBankName,
-  setFormNotes,
   setEditingExpenseId,
   setIsAddExpenseOpen,
   activeCurrencies,
@@ -233,13 +226,6 @@ export const IncomeView = ({
           <button 
             onClick={() => {
               setFormType('income');
-              setFormDate(new Date().toISOString().split('T')[0]);
-              setFormCategory('Salary');
-              setFormSubcategory('Regular Salary');
-              setFormAmount('');
-              setFormPayFrom('Bank Account');
-              setFormBankName('');
-              setFormNotes('');
               setEditingExpenseId(null);
               setIsAddExpenseOpen(true);
             }}

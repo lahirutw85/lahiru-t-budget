@@ -1,10 +1,9 @@
-import React from 'react';
 import { X, Check, Plus, MinusCircle, Edit2, ChevronRight, Star } from 'lucide-react';
 import { 
   Home, ShoppingBag, Car, HeartPulse, GraduationCap, Utensils, 
-  Tv, Compass, HelpCircle, AlertCircle, Award, Briefcase, 
+  Tv, Compass, Award, Briefcase, 
   Coffee, Gift, Landmark, Phone, Receipt, Settings, 
-  ShoppingCart, ShieldAlert, Sparkles, Smile, MessageCircle, PiggyBank,
+  ShoppingCart, Sparkles, Smile, MessageCircle, PiggyBank,
   CheckCircle2, Flame, Scissors, Zap, Shield, Trash2, Dumbbell, Plane
 } from 'lucide-react';
 
@@ -98,7 +97,7 @@ export const CategoryManagerModal = ({
   setEditSubCategoryIcon,
   handleSaveEditSubCategory,
 
-  AVAILABLE_ICONS = DEFAULT_ALL_ICONS => DEFAULT_AVAILABLE_ICONS
+  AVAILABLE_ICONS = DEFAULT_AVAILABLE_ICONS
 }) => {
   return (
     <>
@@ -215,7 +214,7 @@ export const CategoryManagerModal = ({
                     No Icon
                   </button>
 
-                  {DEFAULT_AVAILABLE_ICONS.map((item, idx) => {
+                  {AVAILABLE_ICONS.map((item, idx) => {
                     const IconComponent = item.icon;
                     const isSelected = newCategoryIcon === IconComponent;
                     return (
@@ -292,7 +291,7 @@ export const CategoryManagerModal = ({
                     No Icon
                   </button>
 
-                  {DEFAULT_AVAILABLE_ICONS.map((item, idx) => {
+                  {AVAILABLE_ICONS.map((item, idx) => {
                     const IconComponent = item.icon;
                     const isSelected = editCategoryIcon === IconComponent;
                     return (
@@ -431,7 +430,7 @@ export const CategoryManagerModal = ({
                     No Icon
                   </button>
 
-                  {DEFAULT_AVAILABLE_ICONS.map((item, idx) => {
+                  {AVAILABLE_ICONS.map((item, idx) => {
                     const IconComponent = item.icon;
                     const isSelected = newSubCategoryIcon === IconComponent;
                     return (
@@ -508,7 +507,7 @@ export const CategoryManagerModal = ({
                     No Icon
                   </button>
 
-                  {DEFAULT_AVAILABLE_ICONS.map((item, idx) => {
+                  {AVAILABLE_ICONS.map((item, idx) => {
                     const IconComponent = item.icon;
                     const isSelected = editSubCategoryIcon === IconComponent;
                     return (

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { X, Check, Plus, MinusCircle } from 'lucide-react';
 
 const DEFAULT_ALL_CURRENCIES = [
@@ -19,8 +19,6 @@ export const CurrencyManagerModal = ({
   setSelectedCurrencyToAdd,
   currencies,
   setCurrencies,
-  formCurrency,
-  setFormCurrency,
   ALL_CURRENCIES = DEFAULT_ALL_CURRENCIES
 }) => {
   useEffect(() => {
@@ -142,16 +140,12 @@ export const CurrencyManagerModal = ({
                         </button>
                         <button
                           onClick={() => {
-                            const activeNonDefaults = currencies.filter(curr => !curr.isDefault);
                             if (currencies.length <= 1) {
                               alert("Cannot delete the only currency!");
                               return;
                             }
                             const updated = currencies.filter(curr => curr.code !== c.code);
                             setCurrencies(updated);
-                            if (formCurrency === c.code) {
-                              setFormCurrency(updated[0].code);
-                            }
                           }}
                           className="text-red-500 hover:text-red-700 transition-colors cursor-pointer"
                           title="Remove Currency"

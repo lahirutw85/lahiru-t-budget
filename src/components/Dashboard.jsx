@@ -44,35 +44,32 @@
 //       with import statements from the paths above.
 // ================================================================
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BudgetService } from '../models/BudgetService';
 import userProfileImg from '../assets/user_profile.jpg';
 import {
-  // Layout & Navigation icons
-  Menu, X, ChevronDown, ChevronRight,
-
-  // Action icons
-  Plus, Save, Paperclip, Check, Edit2, Trash2, MinusCircle, Settings,
-
-  // Finance / Category icons
-  Wallet, CreditCard, Landmark, CircleDollarSign, DollarSign, Coins,
-  ShoppingCart, ShoppingBag, Home, Briefcase, Umbrella, Fuel, Star,
-
-  // Trend icons
-  TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
-
-  // UI / misc icons
-  Bell, Search, LayoutDashboard, Calendar, Folder, Users, Presentation,
-  Moon, Sun, HelpCircle, Activity, Battery,
-
-  // Category picker icons
-  Lightbulb, Music, Gift, GraduationCap, Bike, Phone, Globe, Lock,
-  Monitor, Mail, Wrench, Scissors, Shirt, Dumbbell, Tv, Heart,
-  Compass, Coffee, BedDouble, BookOpen, Car, Utensils,
+  Wallet,
+  ShoppingCart,
+  ShoppingBag,
+  Home,
+  Umbrella,
+  Fuel,
+  Star,
+  TrendingDown,
+  Search,
+  Moon,
+  Sun,
+  Bell,
+  Lightbulb,
+  Music,
+  LayoutDashboard,
+  CircleDollarSign,
+  Landmark,
+  Calendar,
+  Folder,
+  Users,
+  Menu,
 } from 'lucide-react';
-
-// Recharts — used for the Donut / Pie charts on all pages
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 // Modular Layouts, Views, and Modals
 import { Sidebar } from './layout/Sidebar';
@@ -91,15 +88,55 @@ import { Login } from './Login';
 // §2. EXTERNAL CONSTANTS & UTILITIES
 // ================================================================
 import { THEMES } from '../constants/themes';
-import { ALL_CURRENCIES, EXCHANGE_RATES } from '../constants/currencies';
-import { SRI_LANKA_BANKS, UAE_BANKS, SRI_LANKA_BRANCHES, UAE_BRANCHES } from '../constants/banks';
+import { ALL_CURRENCIES } from '../constants/currencies';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
-import { convertCurrency } from '../utils/currencyUtils';
 import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings } from '../utils/dataSync';
 
 
 
 
+
+const INITIAL_CATEGORIES = [
+  { id: '1', name: 'Home/Rent', icon: Home, subCategories: [
+    { id: 's1', name: 'Mortgage', icon: Home },
+    { id: 's2', name: 'Mortgage-2nd', icon: Home },
+    { id: 's3', name: 'Rent', icon: Home },
+    { id: 's4', name: 'Association fee', icon: Home },
+    { id: 's5', name: 'Property tax', icon: Home }
+  ]},
+  { id: '2', name: 'Utilities', icon: Lightbulb, subCategories: [
+    { id: 's6', name: 'Electricity', icon: Lightbulb },
+    { id: 's7', name: 'Water', icon: Lightbulb },
+    { id: 's8', name: 'Gas', icon: Lightbulb },
+    { id: 's9', name: 'Internet', icon: Lightbulb }
+  ]},
+  { id: '3', name: 'Food/Groceries', icon: ShoppingCart, subCategories: [
+    { id: 's10', name: 'Groceries', icon: ShoppingCart },
+    { id: 's11', name: 'Restaurant', icon: ShoppingCart },
+    { id: 's12', name: 'Snacks', icon: ShoppingCart }
+  ]},
+  { id: '4', name: 'Departmental', icon: ShoppingBag, subCategories: [
+    { id: 's13', name: 'Clothing', icon: ShoppingBag },
+    { id: 's14', name: 'Electronics', icon: ShoppingBag }
+  ]},
+  { id: '5', name: 'Entertainment', icon: Music, subCategories: [
+    { id: 's15', name: 'Movies', icon: Music },
+    { id: 's16', name: 'Games', icon: Music },
+    { id: 's17', name: 'Subscribes', icon: Music }
+  ]},
+  { id: '6', name: 'Car/Auto', icon: Fuel, subCategories: [
+    { id: 's18', name: 'Fuel/Gas', icon: Fuel },
+    { id: 's19', name: 'Service', icon: Fuel },
+    { id: 's20', name: 'Parking', icon: Fuel }
+  ]},
+  { id: '7', name: 'Insurance/Medical', icon: Umbrella, subCategories: [
+    { id: 's21', name: 'Insurance', icon: Umbrella },
+    { id: 's22', name: 'Medical', icon: Umbrella }
+  ]},
+  { id: '8', name: 'Misc/One-time', icon: Star, subCategories: [
+    { id: 's23', name: 'General', icon: Star }
+  ]}
+];
 
 // ================================================================
 // §7. DASHBOARD COMPONENT
@@ -147,56 +184,7 @@ const Dashboard = () => {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   // ── §7b: STARTUP DATA FETCH FROM GOOGLE SHEETS (cloud) ────────
-  // On mount, fetch all data from Google Apps Script Web App.
-  // Falls back to localStorage if the cloud is unreachable.
-  useEffect(() => {
-    const loadAll = async () => {
-      // 1. Expenses
-      const expData = await fetchExpenses();
-      const hydratedExp = (expData || []).map(exp => ({ ...exp, icon: getIconForCategory(exp.category) }));
-      setExpenses(hydratedExp);
-      const uniqueYears = Array.from(new Set(hydratedExp.map(e => e.date?.split('-')[0]).filter(Boolean)));
-      const currentYear = new Date().getFullYear().toString();
-      if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
-      setYears(uniqueYears.sort((a, b) => b - a));
 
-      // 2. Incomes
-      const incData = await fetchIncomes();
-      const hydratedInc = (incData || []).map(inc => ({ ...inc, icon: getIconForCategory(inc.category) }));
-      setIncomes(hydratedInc);
-
-      // 3. Bank Accounts
-      const bankData = await fetchBankAccounts();
-      if (bankData !== null) {
-        setBankAccounts((bankData || []).map(b => {
-          if (b.accountType !== 'Credit Card') {
-            return {
-              ...b,
-              accountNumbers: Array.isArray(b.accountNumbers) && b.accountNumbers.length > 0 ? b.accountNumbers : [''],
-              balances: Array.isArray(b.balances) && b.balances.length > 0 ? b.balances : [parseFloat(b.balance) || 0],
-            };
-          }
-          return b;
-        }));
-      }
-
-      // 4. Currencies
-      const currData = await fetchCurrencies();
-      if (currData !== null && currData.length > 0) {
-        setCurrencies(currData);
-      }
-
-      // 5. App Settings
-      const settingsData = await fetchSettings();
-      if (settingsData) {
-        if (Array.isArray(settingsData.customBanks)) setCustomBanks(settingsData.customBanks);
-        if (Array.isArray(settingsData.customAccountTypes)) setCustomAccountTypes(settingsData.customAccountTypes);
-        if (Array.isArray(settingsData.customBranches)) setCustomBranches(settingsData.customBranches);
-      }
-      setIsDataLoaded(true);
-    };
-    loadAll();
-  }, []);
 
   const syncExpensesToDatabase = async (updatedExpenses) => {
     await syncExpenses(updatedExpenses);
@@ -209,25 +197,7 @@ const Dashboard = () => {
   // Add / Edit Expense+Income modal — open/close flag
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
 
-  // Transaction form field states (shared between expense AND income modals)
-  const [formDate,     setFormDate]     = useState(new Date().toISOString().split('T')[0]);
-  const [formCategory, setFormCategory] = useState('Home/Rent');
-  const [formSubcategory, setFormSubcategory] = useState('Rent');
-  const [formAmount,   setFormAmount]   = useState('');
-  const [formPayee,    setFormPayee]    = useState('');
 
-  // Payment source: 'Bank Account' | 'Credit Card' | 'Cash' | ''
-  const [formPayFrom,  setFormPayFrom]  = useState('Bank Account');
-
-  // Bank name selected from the filtered dropdown
-  const [formBankName, setFormBankName] = useState('');
-
-  // Secondary details (account type + branch) for the selected bank,
-  // e.g. 'Savings - Colombo Main' or 'Credit Card - Dubai (Main)'
-  const [formSelectedAccountDetails, setFormSelectedAccountDetails] = useState('');
-
-  const [formNotes,    setFormNotes]    = useState('');
-  const [formCurrency, setFormCurrency] = useState('AED');
 
   // Currency Manager modal — lets the user add/remove currencies
   const [isCurrencyManagerOpen,    setIsCurrencyManagerOpen]    = useState(false);
@@ -347,50 +317,7 @@ const Dashboard = () => {
 
   // Expense categories — user can add/edit/delete these at runtime
   // (Income categories are static INCOME_CATEGORIES constant above)
-  const [categories, setCategories] = useState([
-    { id: '1', name: 'Home/Rent', icon: Home, subCategories: [
-      { id: 's1', name: 'Mortgage', icon: Home },
-      { id: 's2', name: 'Mortgage-2nd', icon: Home },
-      { id: 's3', name: 'Rent', icon: Home },
-      { id: 's4', name: 'Association fee', icon: Home },
-      { id: 's5', name: 'Property tax', icon: Home }
-    ]},
-    { id: '2', name: 'Utilities', icon: Lightbulb, subCategories: [
-      { id: 's6', name: 'Electricity', icon: Lightbulb },
-      { id: 's7', name: 'Water', icon: Lightbulb },
-      { id: 's8', name: 'Gas', icon: Lightbulb },
-      { id: 's9', name: 'Internet', icon: Lightbulb }
-    ]},
-    { id: '3', name: 'Food/Groceries', icon: ShoppingCart, subCategories: [
-      { id: 's10', name: 'Groceries', icon: ShoppingCart },
-      { id: 's11', name: 'Restaurant', icon: ShoppingCart },
-      { id: 's12', name: 'Snacks', icon: ShoppingCart }
-    ]},
-    { id: '4', name: 'Departmental', icon: ShoppingBag, subCategories: [
-      { id: 's13', name: 'Clothing', icon: ShoppingBag },
-      { id: 's14', name: 'Electronics', icon: ShoppingBag }
-    ]},
-    { id: '5', name: 'Entertainment', icon: Music, subCategories: [
-      { id: 's15', name: 'Movies', icon: Music },
-      { id: 's16', name: 'Games', icon: Music },
-      { id: 's17', name: 'Subscribes', icon: Music }
-    ]},
-    { id: '6', name: 'Car/Auto', icon: Fuel, subCategories: [
-      { id: 's18', name: 'Fuel/Gas', icon: Fuel },
-      { id: 's19', name: 'Service', icon: Fuel },
-      { id: 's20', name: 'Parking', icon: Fuel }
-    ]},
-    { id: '7', name: 'Insurance/Medical', icon: Umbrella, subCategories: [
-      { id: 's21', name: 'Insurance', icon: Umbrella },
-      { id: 's22', name: 'Medical', icon: Umbrella }
-    ]},
-    { id: '8', name: 'Misc/One-time', icon: Star, subCategories: [
-      { id: 's23', name: 'General', icon: Star }
-    ]}
-  ]);
-
-  // OOP Budget Service Instance — acts as the main engine for business logic
-  const budgetService = new BudgetService(expenses, incomes, bankAccounts);
+  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
   // ── §7b: COMPONENT-LEVEL HELPERS ────────────────────────────
 
@@ -406,6 +333,68 @@ const Dashboard = () => {
     const foundIncome = INCOME_CATEGORIES.find(c => c.name.toLowerCase() === catName?.toLowerCase());
     return foundIncome ? foundIncome.icon : Wallet;
   };
+
+  // On mount, fetch all data from Google Apps Script Web App.
+  // Falls back to localStorage if the cloud is unreachable.
+  useEffect(() => {
+    const loadAll = async () => {
+      const getIcon = (catName) => {
+        const foundExpense = INITIAL_CATEGORIES.find(c => c.name.toLowerCase() === catName?.toLowerCase());
+        if (foundExpense) return foundExpense.icon;
+        const foundIncome = INCOME_CATEGORIES.find(c => c.name.toLowerCase() === catName?.toLowerCase());
+        return foundIncome ? foundIncome.icon : Wallet;
+      };
+
+      // 1. Expenses
+      const expData = await fetchExpenses();
+      const hydratedExp = (expData || []).map(exp => ({ ...exp, icon: getIcon(exp.category) }));
+      setExpenses(hydratedExp);
+      const uniqueYears = Array.from(new Set(hydratedExp.map(e => e.date?.split('-')[0]).filter(Boolean)));
+      const currentYear = new Date().getFullYear().toString();
+      if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
+      setYears(uniqueYears.sort((a, b) => b - a));
+
+      // 2. Incomes
+      const incData = await fetchIncomes();
+      const hydratedInc = (incData || []).map(inc => ({ ...inc, icon: getIcon(inc.category) }));
+      setIncomes(hydratedInc);
+
+      // 3. Bank Accounts
+      const bankData = await fetchBankAccounts();
+      if (bankData !== null) {
+        setBankAccounts((bankData || []).map(b => {
+          if (b.accountType !== 'Credit Card') {
+            return {
+              ...b,
+              accountNumbers: Array.isArray(b.accountNumbers) && b.accountNumbers.length > 0 ? b.accountNumbers : [''],
+              balances: Array.isArray(b.balances) && b.balances.length > 0 ? b.balances : [parseFloat(b.balance) || 0],
+            };
+          }
+          return b;
+        }));
+      }
+
+      // 4. Currencies
+      const currData = await fetchCurrencies();
+      if (currData !== null && currData.length > 0) {
+        setCurrencies(currData);
+      }
+
+      // 5. App Settings
+      const settingsData = await fetchSettings();
+      if (settingsData) {
+        if (Array.isArray(settingsData.customBanks)) setCustomBanks(settingsData.customBanks);
+        if (Array.isArray(settingsData.customAccountTypes)) setCustomAccountTypes(settingsData.customAccountTypes);
+        if (Array.isArray(settingsData.customBranches)) setCustomBranches(settingsData.customBranches);
+      }
+      setIsDataLoaded(true);
+    };
+    loadAll();
+  }, []);
+
+  const budgetService = new BudgetService(expenses, incomes, bankAccounts);
+
+
 
 
 
@@ -487,30 +476,11 @@ const Dashboard = () => {
    * then adds a new or updates an existing expense/income in the list.
    * Syncs to localStorage + backend API via syncExpensesToDatabase.
    */
-  const handleSaveExpense = () => {
-    if (!formAmount || isNaN(formAmount) || parseFloat(formAmount) <= 0) {
-      alert('Please enter a valid amount.');
-      return;
-    }
-
-    let savedBankName = formBankName;
-    if ((formPayFrom === 'Bank Account' || formPayFrom === 'Credit Card') && formBankName) {
-      if (formSelectedAccountDetails) {
-        savedBankName = `${formBankName} (${formSelectedAccountDetails})`;
-      }
-    }
-
+  const handleSaveExpense = (transactionData) => {
     try {
       budgetService.saveTransaction(formType, editingExpenseId, {
-        date: formDate,
-        category: formCategory,
-        subCategory: formSubcategory,
-        amount: parseFloat(formAmount),
-        currency: formCurrency,
-        account: formPayFrom || 'Cash',
-        bankName: (formPayFrom === 'Bank Account' || formPayFrom === 'Credit Card') ? savedBankName : '',
-        notes: formNotes,
-        icon: getIconForCategory(formCategory)
+        ...transactionData,
+        icon: getIconForCategory(transactionData.category)
       });
       const updatedExpenses = budgetService.expenses.map(e => e.toJSON());
       const updatedIncomes = budgetService.incomes.map(i => i.toJSON());
@@ -521,64 +491,22 @@ const Dashboard = () => {
       } else {
         syncIncomesToDatabase(updatedIncomes);
       }
+      setIsAddExpenseOpen(false);
+      setEditingExpenseId(null);
     } catch (err) {
       alert(err.message);
-      return;
     }
-    
-    // Reset form
-    setFormAmount('');
-    setFormBankName('');
-    setFormSelectedAccountDetails('');
-    setFormNotes('');
-    setIsAddExpenseOpen(false);
   };
 
   const handleEditExpense = (exp) => {
     setFormType('expense');
     setEditingExpenseId(exp.id);
-    setFormDate(exp.date);
-    setFormCategory(exp.category);
-    setFormSubcategory(exp.subCategory);
-    setFormAmount(exp.amount.toString());
-    setFormCurrency(exp.currency || 'AED');
-    setFormPayFrom(exp.account);
-    
-    let bankPart = exp.bankName || '';
-    let detailPart = '';
-    if (bankPart.includes(' (')) {
-      const parts = bankPart.split(' (');
-      bankPart = parts[0];
-      detailPart = parts[1].replace(')', '');
-    }
-    setFormBankName(bankPart);
-    setFormSelectedAccountDetails(detailPart);
-    
-    setFormNotes(exp.notes);
     setIsAddExpenseOpen(true);
   };
 
   const handleEditIncome = (inc) => {
     setFormType('income');
     setEditingExpenseId(inc.id);
-    setFormDate(inc.date);
-    setFormCategory(inc.category);
-    setFormSubcategory(inc.subCategory);
-    setFormAmount(inc.amount.toString());
-    setFormCurrency(inc.currency || 'AED');
-    setFormPayFrom(inc.account);
-    
-    let bankPart = inc.bankName || '';
-    let detailPart = '';
-    if (bankPart.includes(' (')) {
-      const parts = bankPart.split(' (');
-      bankPart = parts[0];
-      detailPart = parts[1].replace(')', '');
-    }
-    setFormBankName(bankPart);
-    setFormSelectedAccountDetails(detailPart);
-    
-    setFormNotes(inc.notes);
     setIsAddExpenseOpen(true);
   };
 
@@ -678,10 +606,6 @@ const Dashboard = () => {
 
     setExpenses(updatedList);
     syncExpensesToDatabase(updatedList);
-
-    if (formCategory === editingCategory.name) {
-      setFormCategory(updatedName);
-    }
 
     setIsEditCategoryOpen(false);
     setEditingCategory(null);
@@ -1018,14 +942,7 @@ const Dashboard = () => {
               years={years}
               ALL_MONTHS={ALL_MONTHS}
               setFormType={setFormType}
-              setFormDate={setFormDate}
               categories={categories}
-              setFormCategory={setFormCategory}
-              setFormSubcategory={setFormSubcategory}
-              setFormAmount={setFormAmount}
-              setFormPayFrom={setFormPayFrom}
-              setFormBankName={setFormBankName}
-              setFormNotes={setFormNotes}
               setEditingExpenseId={setEditingExpenseId}
               setIsAddExpenseOpen={setIsAddExpenseOpen}
               activeCurrencies={activeCurrencies}
@@ -1045,13 +962,6 @@ const Dashboard = () => {
               years={years}
               ALL_MONTHS={ALL_MONTHS}
               setFormType={setFormType}
-              setFormDate={setFormDate}
-              setFormCategory={setFormCategory}
-              setFormSubcategory={setFormSubcategory}
-              setFormAmount={setFormAmount}
-              setFormPayFrom={setFormPayFrom}
-              setFormBankName={setFormBankName}
-              setFormNotes={setFormNotes}
               setEditingExpenseId={setEditingExpenseId}
               setIsAddExpenseOpen={setIsAddExpenseOpen}
               activeCurrencies={activeCurrencies}
@@ -1092,37 +1002,19 @@ const Dashboard = () => {
 
       {/* Modular Modals */}
       <TransactionModal
+        key={`${isAddExpenseOpen}-${editingExpenseId || 'new'}`}
         isAddExpenseOpen={isAddExpenseOpen}
         setIsAddExpenseOpen={setIsAddExpenseOpen}
         formType={formType}
-        editingExpenseId={editingExpenseId}
-        setEditingExpenseId={setEditingExpenseId}
-        handleSaveExpense={handleSaveExpense}
-        formDate={formDate}
-        setFormDate={setFormDate}
-        formCategory={formCategory}
-        setFormCategory={setFormCategory}
+        editingTransaction={editingExpenseId ? (formType === 'income' ? incomes.find(i => i.id === editingExpenseId) : expenses.find(e => e.id === editingExpenseId)) : null}
+        onSave={handleSaveExpense}
         INCOME_CATEGORIES={INCOME_CATEGORIES}
         categories={categories}
-        formSubcategory={formSubcategory}
-        setFormSubcategory={setFormSubcategory}
         setIsCategoriesManagerOpen={setIsCategoriesManagerOpen}
         handleOpenSubCategoriesManager={handleOpenSubCategoriesManager}
-        formAmount={formAmount}
-        setFormAmount={setFormAmount}
-        formCurrency={formCurrency}
-        setFormCurrency={setFormCurrency}
         currencies={currencies}
         setIsCurrencyManagerOpen={setIsCurrencyManagerOpen}
-        formPayFrom={formPayFrom}
-        setFormPayFrom={setFormPayFrom}
-        formBankName={formBankName}
-        setFormBankName={setFormBankName}
-        formSelectedAccountDetails={formSelectedAccountDetails}
-        setFormSelectedAccountDetails={setFormSelectedAccountDetails}
         computedBankAccounts={computedBankAccounts}
-        formNotes={formNotes}
-        setFormNotes={setFormNotes}
       />
 
       <BankModal
@@ -1149,8 +1041,6 @@ const Dashboard = () => {
         ALL_CURRENCIES={ALL_CURRENCIES}
         currencies={currencies}
         setCurrencies={setCurrencies}
-        formCurrency={formCurrency}
-        setFormCurrency={setFormCurrency}
       />
 
       <CategoryManagerModal

@@ -12,14 +12,7 @@ export const ExpensesView = ({
   years,
   ALL_MONTHS,
   setFormType,
-  setFormDate,
   categories,
-  setFormCategory,
-  setFormSubcategory,
-  setFormAmount,
-  setFormPayFrom,
-  setFormBankName,
-  setFormNotes,
   setEditingExpenseId,
   setIsAddExpenseOpen,
   activeCurrencies,
@@ -234,22 +227,6 @@ export const ExpensesView = ({
           <button 
             onClick={() => {
               setFormType('expense');
-              setFormDate(new Date().toISOString().split('T')[0]);
-              if (categories.length > 0) {
-                setFormCategory(categories[0].name);
-                if (categories[0].subCategories && categories[0].subCategories.length > 0) {
-                  setFormSubcategory(categories[0].subCategories[0].name);
-                } else {
-                  setFormSubcategory('General');
-                }
-              } else {
-                setFormCategory('');
-                setFormSubcategory('General');
-              }
-              setFormAmount('');
-              setFormPayFrom('Cash');
-              setFormBankName('');
-              setFormNotes('');
               setEditingExpenseId(null);
               setIsAddExpenseOpen(true);
             }}

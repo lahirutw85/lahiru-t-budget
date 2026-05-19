@@ -1,4 +1,3 @@
-import React from 'react';
 import { Plus, Landmark, CreditCard, Edit2, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../../utils/currencyUtils';
 

@@ -563,27 +563,27 @@ export const DashboardView = ({
                 name: 'TOTAL INCOME', 
                 budget: formatCurrencyLocal(28500, currencyCode), 
                 actual: formattedTotalIncomeValue, 
-                percent: 28500 > 0 ? Math.min(100, Math.round((totalIncomeValue / 28500) * 100)) : 0,
+                percent: Math.min(100, Math.round((totalIncomeValue / 28500) * 100)),
                 color: COLORS.green,
-                badge: 28500 > 0 ? `${Math.round((totalIncomeValue / 28500) * 100)}%` : '0%',
+                badge: `${Math.round((totalIncomeValue / 28500) * 100)}%`,
                 badgeColor: COLORS.green
               },
               { 
                 name: 'TOTAL EXPENSES', 
                 budget: formatCurrencyLocal(10000, currencyCode), 
                 actual: formattedTotalExpenditure, 
-                percent: 10000 > 0 ? Math.min(100, Math.round((totalExpenditure / 10000) * 100)) : 0,
+                percent: Math.min(100, Math.round((totalExpenditure / 10000) * 100)),
                 color: COLORS.red,
-                badge: 10000 > 0 ? `${Math.round((totalExpenditure / 10000) * 100)}%` : '0%',
+                badge: `${Math.round((totalExpenditure / 10000) * 100)}%`,
                 badgeColor: COLORS.red
               },
               { 
                 name: 'NET', 
                 budget: formatCurrencyLocal(18500, currencyCode), 
                 actual: formatCurrencyLocal(totalIncomeValue - totalExpenditure, currencyCode), 
-                percent: 18500 > 0 ? Math.min(100, Math.max(0, Math.round(((totalIncomeValue - totalExpenditure) / 18500) * 100))) : 0,
+                percent: Math.min(100, Math.max(0, Math.round(((totalIncomeValue - totalExpenditure) / 18500) * 100))),
                 color: (totalIncomeValue - totalExpenditure) >= 0 ? COLORS.skyBlue : COLORS.red,
-                badge: 18500 > 0 ? `${Math.round(((totalIncomeValue - totalExpenditure) / 18500) * 100)}%` : '0%',
+                badge: `${Math.round(((totalIncomeValue - totalExpenditure) / 18500) * 100)}%`,
                 badgeColor: (totalIncomeValue - totalExpenditure) >= 0 ? COLORS.green : COLORS.red
               }
             ].map((item, idx) => (

@@ -10,7 +10,7 @@
 
 import {
   Briefcase, Landmark, TrendingUp, Gift, Coins, Home, Lightbulb,
-  ShoppingBag, ShoppingCart, Music, Fuel, Umbrella, Star, Edit2,
+  ShoppingBag, ShoppingCart, Music, Fuel, Umbrella,
   Utensils, GraduationCap, Bike, Phone, Globe, Lock, Monitor, Mail,
   Wrench, Scissors, Shirt, Dumbbell, Tv, Heart, Compass, Coffee,
   BedDouble, BookOpen, Car, Wallet, Users, Trash2, Activity

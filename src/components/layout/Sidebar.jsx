@@ -1,4 +1,3 @@
-import React from 'react';
 import { Settings, HelpCircle, X } from 'lucide-react';
 
 export const Sidebar = ({
