@@ -69,6 +69,7 @@ import {
   Folder,
   Users,
   Menu,
+  Presentation,
 } from 'lucide-react';
 
 // Modular Layouts, Views, and Modals
