@@ -9,6 +9,8 @@
 
 import { Transaction } from './Transaction';
 import { BankAccount } from './BankAccount';
+import { TransactionCollection } from './TransactionCollection';
+import { BankAccountCollection } from './BankAccountCollection';
 import { syncExpenses, syncIncomes, syncBankAccounts } from '../utils/dataSync';
 
 export class BudgetService {
@@ -19,9 +21,31 @@ export class BudgetService {
    * @param {Array<Object>} bankAccountsList - Initial list of bank accounts
    */
   constructor(expensesList = [], incomesList = [], bankAccountsList = []) {
-    this.expenses = Array.isArray(expensesList) ? expensesList.map(e => new Transaction(e)) : [];
-    this.incomes = Array.isArray(incomesList) ? incomesList.map(i => new Transaction(i)) : [];
-    this.bankAccounts = Array.isArray(bankAccountsList) ? bankAccountsList.map(b => new BankAccount(b)) : [];
+    this.expensesCollection = new TransactionCollection(expensesList);
+    this.incomesCollection = new TransactionCollection(incomesList);
+    this.bankAccountsCollection = new BankAccountCollection(bankAccountsList);
+  }
+
+  // Getters and setters for backward compatibility with array APIs
+  get expenses() {
+    return this.expensesCollection.toArray();
+  }
+  set expenses(val) {
+    this.expensesCollection = new TransactionCollection(val);
+  }
+
+  get incomes() {
+    return this.incomesCollection.toArray();
+  }
+  set incomes(val) {
+    this.incomesCollection = new TransactionCollection(val);
+  }
+
+  get bankAccounts() {
+    return this.bankAccountsCollection.toArray();
+  }
+  set bankAccounts(val) {
+    this.bankAccountsCollection = new BankAccountCollection(val);
   }
 
   // ─── GETTERS & DERIVED CALCULATIONS ─────────────────────────────
@@ -33,7 +57,9 @@ export class BudgetService {
    * @returns {Array<BankAccount>} List of computed BankAccount instances
    */
   getComputedBankAccounts() {
-    return this.bankAccounts.map(bank => bank.computeBalance(this.incomes, this.expenses));
+    return this.bankAccountsCollection
+      .computeBalances(this.incomesCollection, this.expensesCollection)
+      .toArray();
   }
 
   /**
@@ -42,14 +68,9 @@ export class BudgetService {
    * @returns {Object} Key-value pair of currency code to total balance (e.g. { LKR: 25000, AED: 4500 })
    */
   sumBalancesByCurrency() {
-    const computed = this.getComputedBankAccounts();
-    return computed.reduce((acc, bank) => {
-      if (bank.accountType !== 'Credit Card') {
-        const cur = bank.currency || 'LKR';
-        acc[cur] = (acc[cur] || 0) + (bank.balance || 0);
-      }
-      return acc;
-    }, {});
+    return this.bankAccountsCollection
+      .computeBalances(this.incomesCollection, this.expensesCollection)
+      .sumBalancesByCurrency();
   }
 
   /**
@@ -59,17 +80,9 @@ export class BudgetService {
    * @returns {number} Sum total in default currency
    */
   sumBalancesDefaultCurrency(defaultCurrency) {
-    const computed = this.getComputedBankAccounts();
-    return computed.reduce((sum, bank) => {
-      if (bank.accountType !== 'Credit Card') {
-        const bankBalance = bank.balance || 0;
-        const converted = bank.currency === defaultCurrency
-          ? bankBalance
-          : new Transaction({ amount: bankBalance, currency: bank.currency }).getConvertedAmount(defaultCurrency);
-        return sum + converted;
-      }
-      return sum;
-    }, 0);
+    return this.bankAccountsCollection
+      .computeBalances(this.incomesCollection, this.expensesCollection)
+      .sumBalancesDefaultCurrency(defaultCurrency);
   }
 
   // ─── TRANSACTION ACTIONS ────────────────────────────────────────
@@ -91,19 +104,21 @@ export class BudgetService {
 
     if (formType === 'income') {
       let updated;
+      const currentIncomes = this.incomes;
       if (editingId) {
-        updated = this.incomes.map(i => i.id === editingId ? newTx : i);
+        updated = currentIncomes.map(i => i.id === editingId ? newTx : i);
       } else {
-        updated = [newTx, ...this.incomes];
+        updated = [newTx, ...currentIncomes];
       }
       this.incomes = updated;
       syncIncomes(updated.map(i => i.toJSON()));
     } else {
       let updated;
+      const currentExpenses = this.expenses;
       if (editingId) {
-        updated = this.expenses.map(e => e.id === editingId ? newTx : e);
+        updated = currentExpenses.map(e => e.id === editingId ? newTx : e);
       } else {
-        updated = [newTx, ...this.expenses];
+        updated = [newTx, ...currentExpenses];
       }
       this.expenses = updated;
       syncExpenses(updated.map(e => e.toJSON()));
@@ -147,10 +162,11 @@ export class BudgetService {
     }
 
     let updated;
+    const currentBanks = this.bankAccounts;
     if (editingId) {
-      updated = this.bankAccounts.map(b => b.id === editingId ? newBank : b);
+      updated = currentBanks.map(b => b.id === editingId ? newBank : b);
     } else {
-      updated = [...this.bankAccounts, newBank];
+      updated = [...currentBanks, newBank];
     }
     this.bankAccounts = updated;
     const serialized = updated.map(b => b.toJSON());

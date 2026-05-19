@@ -84,6 +84,7 @@ import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
 import { CategoryManagerModal } from './modals/CategoryManagerModal';
+import { Login } from './Login';
 
 
 // ================================================================
@@ -122,30 +123,12 @@ const Dashboard = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return sessionStorage.getItem('isLoggedIn') === 'true';
   });
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-
-
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (loginUsername === 'lahirut85' && loginPassword === 'Sheran@2591277') {
-      sessionStorage.setItem('isLoggedIn', 'true');
-      setIsLoggedIn(true);
-      setLoginError('');
-    } else {
-      setLoginError('Invalid username or password');
-    }
-  };
 
   const handleLogout = () => {
     sessionStorage.removeItem('isLoggedIn');
     setIsLoggedIn(false);
     setProfileDropdownOpen(false);
-    setLoginUsername('');
-    setLoginPassword('');
-    setLoginError('');
   };
 
   // Date/Period selectors — used to filter expenses & incomes by month/year
@@ -311,15 +294,7 @@ const Dashboard = () => {
   // Bank Account MODAL state — open/close + which record is being edited
   const [isBankModalOpen,      setIsBankModalOpen]      = useState(false);
   const [editingBankAccountId, setEditingBankAccountId] = useState(null);
-  const [bankFormName,         setBankFormName]         = useState('');
-  const [bankFormType,         setBankFormType]         = useState('Savings');
-  const [bankFormCurrency,     setBankFormCurrency]     = useState('LKR');
-  const [bankFormBalance,      setBankFormBalance]      = useState('');
-  const [bankFormLimit,        setBankFormLimit]        = useState('');
-  const [bankFormRemainingLimit, setBankFormRemainingLimit] = useState('');
 
-  const [bankFormCountry, setBankFormCountry] = useState('Sri Lanka');
-  const [bankFormBranch, setBankFormBranch] = useState('');
   
   // Custom user-added items for the bank modal dropdowns (Google Sheets cloud)
   const [customBanks, setCustomBanks] = useState(() => {
@@ -347,19 +322,7 @@ const Dashboard = () => {
     });
   }, [customBanks, customAccountTypes, customBranches, isDataLoaded]);
 
-  // Inline "Add custom" input visibility toggles + their text values
-  const [showAddCustomBank,   setShowAddCustomBank]   = useState(false);
-  const [newCustomBankName,   setNewCustomBankName]   = useState('');
-  const [showAddCustomType,   setShowAddCustomType]   = useState(false);
-  const [newCustomTypeName,   setNewCustomTypeName]   = useState('');
-  const [showAddCustomBranch, setShowAddCustomBranch] = useState(false);
-  const [newCustomBranchName, setNewCustomBranchName] = useState('');
 
-  // Multi-account rows for Savings/Current bank accounts:
-  // Each array index corresponds to one account number + its balance.
-  // e.g. accountNumbers[0]='111-222' + balances[0]='50000'
-  const [bankFormAccountNumbers, setBankFormAccountNumbers] = useState(['']);
-  const [bankFormBalances,       setBankFormBalances]       = useState(['']);
 
   // Category manager state — for the modal that lets users add/edit/delete categories
   const [isCategoriesManagerOpen, setIsCategoriesManagerOpen] = useState(false);
@@ -444,49 +407,17 @@ const Dashboard = () => {
     return foundIncome ? foundIncome.icon : Wallet;
   };
 
-  /**
-   * formatExpenseDate
-   * Converts ISO date string 'YYYY-MM-DD' → readable 'Jan 5, 2026'.
-   * Used in all transaction table rows.
-   */
-  const formatExpenseDate = (dateStr) => {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    const year     = parts[0];
-    const monthIdx = parseInt(parts[1], 10) - 1;
-    const day      = parseInt(parts[2], 10);
-    const monthName = ALL_MONTHS[monthIdx]?.substring(0, 3);
-    return `${monthName} ${day}, ${year}`;
-  };
+
 
   // ── §7c: COMPUTED FILTERED DATA ──────────────────────────────
-  // These arrays re-compute whenever expenses/incomes or the selected
+  // These collections re-compute whenever expenses/incomes or the selected
   // year/month change. All charts and tables read from these.
 
   // Only expenses that match the currently selected year + month
-  const filteredExpenses = expenses.filter(exp => {
-    if (!exp.date) return false;
-    const parts = exp.date.split('-');
-    if (parts.length !== 3) return false;
-    const expYear = parts[0];
-    if (selectedMonth === 'Full Year') return expYear === selectedYear;
-    const expMonthIndex = parseInt(parts[1], 10) - 1;
-    const expMonth = ALL_MONTHS[expMonthIndex];
-    return expYear === selectedYear && expMonth === selectedMonth;
-  });
+  const filteredExpenses = budgetService.expensesCollection.filterByPeriod(selectedYear, selectedMonth, ALL_MONTHS);
 
   // Only incomes that match the currently selected year + month
-  const filteredIncomes = incomes.filter(inc => {
-    if (!inc.date) return false;
-    const parts = inc.date.split('-');
-    if (parts.length !== 3) return false;
-    const incYear = parts[0];
-    if (selectedMonth === 'Full Year') return incYear === selectedYear;
-    const incMonthIndex = parseInt(parts[1], 10) - 1;
-    const incMonth = ALL_MONTHS[incMonthIndex];
-    return incYear === selectedYear && incMonth === selectedMonth;
-  });
+  const filteredIncomes = budgetService.incomesCollection.filterByPeriod(selectedYear, selectedMonth, ALL_MONTHS);
 
   // Calculate previous month's/year's stats for trend comparisons
   const currentMonthIdx = ALL_MONTHS.indexOf(selectedMonth);
@@ -501,31 +432,11 @@ const Dashboard = () => {
   const prevMonthName = prevMonthIdx >= 0 ? ALL_MONTHS[prevMonthIdx] : null;
   const prevYearStr = prevYear.toString();
 
-  const prevExpenses = expenses.filter(exp => {
-    if (!exp.date) return false;
-    const parts = exp.date.split('-');
-    if (parts.length !== 3) return false;
-    const expYear = parts[0];
-    if (selectedMonth === 'Full Year') {
-      return expYear === prevYearStr;
-    }
-    const expMonthIndex = parseInt(parts[1], 10) - 1;
-    const expMonth = ALL_MONTHS[expMonthIndex];
-    return expYear === prevYearStr && expMonth === prevMonthName;
-  });
+  const prevExpenses = budgetService.expensesCollection
+    .filterByPeriod(prevYearStr, prevMonthName || 'Full Year', ALL_MONTHS);
 
-  const prevIncomes = incomes.filter(inc => {
-    if (!inc.date) return false;
-    const parts = inc.date.split('-');
-    if (parts.length !== 3) return false;
-    const incYear = parts[0];
-    if (selectedMonth === 'Full Year') {
-      return incYear === prevYearStr;
-    }
-    const incMonthIndex = parseInt(parts[1], 10) - 1;
-    const incMonth = ALL_MONTHS[incMonthIndex];
-    return incYear === prevYearStr && incMonth === prevMonthName;
-  });
+  const prevIncomes = budgetService.incomesCollection
+    .filterByPeriod(prevYearStr, prevMonthName || 'Full Year', ALL_MONTHS);
 
 
 
@@ -540,95 +451,19 @@ const Dashboard = () => {
    * Handles both Credit Card (limit/remainingLimit) and
    * Savings/Current (multiple account numbers + balances).
    */
-  const handleSaveBankAccount = () => {
-    if (!bankFormName || !bankFormName.trim()) {
-      alert('Please select or enter a valid bank name.');
-      return;
-    }
-
-    const isCreditCard = bankFormType === 'Credit Card';
-    
-    let parsedBalance = 0;
-    let parsedLimit = isCreditCard ? parseFloat(bankFormLimit || '0') : 0;
-    let parsedRemaining = isCreditCard ? parseFloat(bankFormRemainingLimit || '0') : 0;
-    
-    let savedAccountNumbers = [];
-    let savedBalances = [];
-
-    if (isCreditCard) {
-      if (isNaN(parsedLimit) || isNaN(parsedRemaining)) {
-        alert('Please enter valid credit card limit details.');
-        return;
-      }
-    } else {
-      const parsedBalancesArray = bankFormBalances.map(b => parseFloat(b || '0'));
-      for (let i = 0; i < parsedBalancesArray.length; i++) {
-        if (isNaN(parsedBalancesArray[i])) {
-          alert(`Please enter a valid balance for account #${i + 1}`);
-          return;
-        }
-      }
-      
-      savedAccountNumbers = [...bankFormAccountNumbers];
-      savedBalances = parsedBalancesArray;
-      parsedBalance = parsedBalancesArray.reduce((sum, val) => sum + val, 0);
-    }
-
+  const handleSaveBankAccount = (bankAccountData) => {
     try {
-      budgetService.saveBankAccount(editingBankAccountId, {
-        country: bankFormCountry,
-        bankName: bankFormName.trim(),
-        accountType: bankFormType,
-        currency: bankFormCurrency,
-        branch: bankFormBranch,
-        balance: parsedBalance,
-        limit: parsedLimit,
-        remainingLimit: parsedRemaining,
-        accountNumbers: savedAccountNumbers,
-        balances: savedBalances
-      });
+      budgetService.saveBankAccount(editingBankAccountId, bankAccountData);
       setBankAccounts(budgetService.bankAccounts.map(b => b.toJSON()));
+      setIsBankModalOpen(false);
+      setEditingBankAccountId(null);
     } catch (err) {
       alert(err.message);
-      return;
     }
-
-    setIsBankModalOpen(false);
-    setEditingBankAccountId(null);
-    
-    // Reset Form
-    setBankFormCountry('Sri Lanka');
-    setBankFormName('');
-    setBankFormType('Savings');
-    setBankFormCurrency('LKR');
-    setBankFormBranch('');
-    setBankFormBalance('');
-    setBankFormLimit('');
-    setBankFormRemainingLimit('');
-    setBankFormAccountNumbers(['']);
-    setBankFormBalances(['']);
   };
 
   const handleEditBankAccount = (account) => {
-    const rawAccount = bankAccounts.find(b => b.id === account.id) || account;
-    setEditingBankAccountId(rawAccount.id);
-    setBankFormCountry(rawAccount.country || 'Sri Lanka');
-    setBankFormName(rawAccount.bankName);
-    setBankFormType(rawAccount.accountType);
-    setBankFormCurrency(rawAccount.currency);
-    setBankFormBranch(rawAccount.branch || '');
-    setBankFormBalance(rawAccount.balance ? rawAccount.balance.toString() : '');
-    setBankFormLimit(rawAccount.limit ? rawAccount.limit.toString() : '');
-    setBankFormRemainingLimit(rawAccount.remainingLimit ? rawAccount.remainingLimit.toString() : '');
-    
-    if (rawAccount.accountNumbers && rawAccount.accountNumbers.length > 0) {
-      setBankFormAccountNumbers([...rawAccount.accountNumbers]);
-      setBankFormBalances(rawAccount.balances ? rawAccount.balances.map(b => b.toString()) : ['0']);
-    } else {
-      setBankFormAccountNumbers(['']);
-      setBankFormBalances([rawAccount.balance ? rawAccount.balance.toString() : '']);
-    }
-    
+    setEditingBankAccountId(account.id);
     setIsBankModalOpen(true);
   };
 
@@ -965,24 +800,15 @@ const Dashboard = () => {
     || { code: 'AED', symbol: 'AED' };
   const currencyCode   = defaultCurrencyObj.code;
 
-  // Helper to sum by currency for local state calculations
-  const sumByCurrency = (items) => {
-    return items.reduce((acc, item) => {
-      const cur = item.currency || 'AED';
-      acc[cur] = (acc[cur] || 0) + (item.amount || 0);
-      return acc;
-    }, {});
-  };
-
-  const expensesSumByCurrency = sumByCurrency(filteredExpenses);
-  const incomesSumByCurrency  = sumByCurrency(filteredIncomes);
+  const expensesSumByCurrency = filteredExpenses.sumByCurrency();
+  const incomesSumByCurrency  = filteredIncomes.sumByCurrency();
   const computedBankAccounts = budgetService.getComputedBankAccounts();
   const bankBalancesSumByCurrency = budgetService.sumBalancesByCurrency();
 
   // All currencies that have at least one non-zero transaction in the current period OR have a non-zero bank balance
   const activeCurrenciesForPeriod = Array.from(new Set([
-    ...Object.keys(incomesSumByCurrency),
-    ...Object.keys(expensesSumByCurrency),
+    ...filteredIncomes.getUniqueCurrencies(),
+    ...filteredExpenses.getUniqueCurrencies(),
     ...Object.keys(bankBalancesSumByCurrency)
   ])).filter(cur => 
     (incomesSumByCurrency[cur] || 0) > 0 || 
@@ -995,25 +821,13 @@ const Dashboard = () => {
     ? activeCurrenciesForPeriod
     : [currencyCode];
 
-  // Helper to sum all-time CASH transactions by currency (excluding bank and credit card)
-  const sumAllTimeCashByCurrency = (items) => {
-    return items.reduce((acc, item) => {
-      const accType = item.account || 'Cash';
-      if (accType !== 'Bank Account' && accType !== 'Credit Card') {
-        const cur = item.currency || 'AED';
-        acc[cur] = (acc[cur] || 0) + (item.amount || 0);
-      }
-      return acc;
-    }, {});
-  };
-
-  const allTimeIncomesSumCash = sumAllTimeCashByCurrency(incomes);
-  const allTimeExpensesSumCash = sumAllTimeCashByCurrency(expenses);
+  const cashIncomesSumByCurrency = budgetService.incomesCollection.filterCash().sumByCurrency();
+  const cashExpensesSumByCurrency = budgetService.expensesCollection.filterCash().sumByCurrency();
 
   // Calculate balances by currency: cash balance (all-time cash income - all-time cash expense) + bank details account balances
   const balancesByCurrency = activeCurrencies.reduce((acc, cur) => {
-    const cashInc = allTimeIncomesSumCash[cur] || 0;
-    const cashExp = allTimeExpensesSumCash[cur] || 0;
+    const cashInc = cashIncomesSumByCurrency[cur] || 0;
+    const cashExp = cashExpensesSumByCurrency[cur] || 0;
     const bankSum = bankBalancesSumByCurrency[cur] || 0;
     acc[cur] = (cashInc - cashExp) + bankSum;
     return acc;
@@ -1063,109 +877,7 @@ const Dashboard = () => {
   };
 
   if (!isLoggedIn) {
-    const COLORS = THEMES.dark;
-    return (
-      <div 
-        className="min-h-screen w-screen flex items-center justify-center font-sans transition-colors duration-300 relative overflow-hidden" 
-        style={{ 
-          backgroundColor: '#070A13',
-          backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(79, 209, 245, 0.08) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(236, 141, 245, 0.06) 0%, transparent 40%)'
-        }}
-      >
-        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-[#4FD1F5]/10 rounded-full blur-[80px] pointer-events-none animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-[#EC8DF5]/5 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }}></div>
-
-        <div 
-          className="relative w-full max-w-md mx-4 p-8 rounded-3xl border shadow-2xl backdrop-blur-xl transition-all duration-300"
-          style={{ 
-            backgroundColor: 'rgba(21, 26, 45, 0.8)', 
-            borderColor: 'rgba(255, 255, 255, 0.08)',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-          }}
-        >
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 shadow-inner" style={{ backgroundColor: 'rgba(79, 209, 245, 0.1)', border: '1px solid rgba(79, 209, 245, 0.2)' }}>
-              <Wallet className="w-8 h-8 text-[#4FD1F5]" />
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-white mb-2">Budget Master</h1>
-            <p className="text-sm font-medium" style={{ color: COLORS.textSecondary }}>Personal Finance & Strategic Planning</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-6">
-            {loginError && (
-              <div 
-                className="p-4 rounded-xl text-sm font-medium border flex items-center gap-3 animate-pulse"
-                style={{ 
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)', 
-                  borderColor: 'rgba(239, 68, 68, 0.2)', 
-                  color: '#FCA5A5' 
-                }}
-              >
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                {loginError}
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.textSecondary }}>Username</label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Users className="w-5 h-5" style={{ color: COLORS.textSecondary }} />
-                </span>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Enter your username"
-                  value={loginUsername}
-                  onChange={(e) => setLoginUsername(e.target.value)}
-                  className="block w-full pl-10 pr-4 py-3 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4FD1F5] transition-all border text-white font-medium"
-                  style={{ 
-                    backgroundColor: '#1C2237', 
-                    borderColor: 'rgba(255, 255, 255, 0.1)' 
-                  }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.textSecondary }}>Password</label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="w-5 h-5" style={{ color: COLORS.textSecondary }} />
-                </span>
-                <input 
-                  type="password" 
-                  required
-                  placeholder="••••••••••••"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="block w-full pl-10 pr-4 py-3 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4FD1F5] transition-all border text-white font-medium"
-                  style={{ 
-                    backgroundColor: '#1C2237', 
-                    borderColor: 'rgba(255, 255, 255, 0.1)' 
-                  }}
-                />
-              </div>
-            </div>
-
-            <button 
-              type="submit" 
-              className="w-full py-3.5 px-4 font-bold text-sm text-[#0B0F19] rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 cursor-pointer shadow-lg hover:shadow-[#4FD1F5]/20"
-              style={{ 
-                backgroundColor: '#4FD1F5',
-                background: 'linear-gradient(135deg, #4FD1F5 0%, #38BDF8 100%)'
-              }}
-            >
-              Sign In
-            </button>
-          </form>
-          
-          <div className="mt-8 pt-6 border-t text-center text-xs" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
-            <span style={{ color: COLORS.textSecondary }}>Secured with enterprise session encryption</span>
-          </div>
-        </div>
-      </div>
-    );
+    return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
 
   return (
@@ -1354,12 +1066,6 @@ const Dashboard = () => {
             <AccountsView
               COLORS={COLORS}
               setEditingBankAccountId={setEditingBankAccountId}
-              setBankFormName={setBankFormName}
-              setBankFormType={setBankFormType}
-              setBankFormCurrency={setBankFormCurrency}
-              setBankFormBalance={setBankFormBalance}
-              setBankFormLimit={setBankFormLimit}
-              setBankFormRemainingLimit={setBankFormRemainingLimit}
               setIsBankModalOpen={setIsBankModalOpen}
               computedBankAccounts={computedBankAccounts}
               currencies={currencies}
@@ -1420,41 +1126,11 @@ const Dashboard = () => {
       />
 
       <BankModal
+        key={`${isBankModalOpen}-${editingBankAccountId || 'new'}`}
         isBankModalOpen={isBankModalOpen}
         setIsBankModalOpen={setIsBankModalOpen}
-        editingBankAccountId={editingBankAccountId}
-        setEditingBankAccountId={setEditingBankAccountId}
-        handleSaveBankAccount={handleSaveBankAccount}
-        bankFormCountry={bankFormCountry}
-        setBankFormCountry={setBankFormCountry}
-        bankFormName={bankFormName}
-        setBankFormName={setBankFormName}
-        bankFormType={bankFormType}
-        setBankFormType={setBankFormType}
-        bankFormCurrency={bankFormCurrency}
-        setBankFormCurrency={setBankFormCurrency}
-        bankFormBranch={bankFormBranch}
-        setBankFormBranch={setBankFormBranch}
-        bankFormLimit={bankFormLimit}
-        setBankFormLimit={setBankFormLimit}
-        bankFormRemainingLimit={bankFormRemainingLimit}
-        setBankFormRemainingLimit={setBankFormRemainingLimit}
-        bankFormAccountNumbers={bankFormAccountNumbers}
-        setBankFormAccountNumbers={setBankFormAccountNumbers}
-        bankFormBalances={bankFormBalances}
-        setBankFormBalances={setBankFormBalances}
-        showAddCustomBank={showAddCustomBank}
-        setShowAddCustomBank={setShowAddCustomBank}
-        showAddCustomType={showAddCustomType}
-        setShowAddCustomType={setShowAddCustomType}
-        showAddCustomBranch={showAddCustomBranch}
-        setShowAddCustomBranch={setShowAddCustomBranch}
-        newCustomBankName={newCustomBankName}
-        setNewCustomBankName={setNewCustomBankName}
-        newCustomTypeName={newCustomTypeName}
-        setNewCustomTypeName={setNewCustomTypeName}
-        newCustomBranchName={newCustomBranchName}
-        setNewCustomBranchName={setNewCustomBranchName}
+        editingAccount={budgetService.bankAccounts.find(b => b.id === editingBankAccountId) || null}
+        onSave={handleSaveBankAccount}
         customBanks={customBanks}
         setCustomBanks={setCustomBanks}
         customAccountTypes={customAccountTypes}
@@ -1485,6 +1161,8 @@ const Dashboard = () => {
         handleDeleteCategory={handleDeleteCategory}
         handleStartEditCategory={handleStartEditCategory}
         handleOpenSubCategoriesManager={handleOpenSubCategoriesManager}
+        handleStartAddCategory={handleStartAddCategory}
+        handleStartEditSubCategory={handleStartEditSubCategory}
         isAddCategoryOpen={isAddCategoryOpen}
         setIsAddCategoryOpen={setIsAddCategoryOpen}
         newCategoryName={newCategoryName}

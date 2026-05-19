@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState } from 'react';
 import { X, Save, Plus, Trash2 } from 'lucide-react';
 
 const DEFAULT_SRI_LANKA_BANKS = [
@@ -20,39 +20,8 @@ const DEFAULT_UAE_BRANCHES = [
 export const BankModal = ({
   isBankModalOpen,
   setIsBankModalOpen,
-  editingBankAccountId,
-  setEditingBankAccountId,
-  handleSaveBankAccount,
-  bankFormCountry,
-  setBankFormCountry,
-  bankFormName,
-  setBankFormName,
-  bankFormType,
-  setBankFormType,
-  bankFormCurrency,
-  setBankFormCurrency,
-  bankFormBranch,
-  setBankFormBranch,
-  bankFormLimit,
-  setBankFormLimit,
-  bankFormRemainingLimit,
-  setBankFormRemainingLimit,
-  bankFormAccountNumbers,
-  setBankFormAccountNumbers,
-  bankFormBalances,
-  setBankFormBalances,
-  showAddCustomBank,
-  setShowAddCustomBank,
-  showAddCustomType,
-  setShowAddCustomType,
-  showAddCustomBranch,
-  setShowAddCustomBranch,
-  newCustomBankName,
-  setNewCustomBankName,
-  newCustomTypeName,
-  setNewCustomTypeName,
-  newCustomBranchName,
-  setNewCustomBranchName,
+  editingAccount,
+  onSave,
   customBanks,
   setCustomBanks,
   customAccountTypes,
@@ -66,7 +35,90 @@ export const BankModal = ({
   SRI_LANKA_BRANCHES = DEFAULT_SRI_LANKA_BRANCHES,
   UAE_BRANCHES = DEFAULT_UAE_BRANCHES
 }) => {
+  const [bankFormCountry, setBankFormCountry] = useState(editingAccount?.country || 'Sri Lanka');
+  const [bankFormName, setBankFormName] = useState(editingAccount?.bankName || '');
+  const [bankFormType, setBankFormType] = useState(editingAccount?.accountType || 'Savings');
+  const [bankFormCurrency, setBankFormCurrency] = useState(editingAccount?.currency || 'LKR');
+  const [bankFormBranch, setBankFormBranch] = useState(editingAccount?.branch || '');
+  const [bankFormLimit, setBankFormLimit] = useState(editingAccount?.limit ? editingAccount.limit.toString() : '');
+  const [bankFormRemainingLimit, setBankFormRemainingLimit] = useState(editingAccount?.remainingLimit ? editingAccount.remainingLimit.toString() : '');
+  const [bankFormAccountNumbers, setBankFormAccountNumbers] = useState(() => {
+    if (editingAccount?.accountNumbers && editingAccount.accountNumbers.length > 0) {
+      return [...editingAccount.accountNumbers];
+    }
+    return [''];
+  });
+  const [bankFormBalances, setBankFormBalances] = useState(() => {
+    if (editingAccount) {
+      if (editingAccount.balances && editingAccount.balances.length > 0) {
+        return editingAccount.balances.map(b => b.toString());
+      }
+      return [editingAccount.balance ? editingAccount.balance.toString() : '0'];
+    }
+    return [''];
+  });
+
+  const [showAddCustomBank, setShowAddCustomBank] = useState(false);
+  const [showAddCustomType, setShowAddCustomType] = useState(false);
+  const [showAddCustomBranch, setShowAddCustomBranch] = useState(false);
+
+  const [newCustomBankName, setNewCustomBankName] = useState('');
+  const [newCustomTypeName, setNewCustomTypeName] = useState('');
+  const [newCustomBranchName, setNewCustomBranchName] = useState('');
+
   if (!isBankModalOpen) return null;
+
+  const handleClose = () => {
+    setIsBankModalOpen(false);
+  };
+
+  const handleSave = () => {
+    if (!bankFormName || !bankFormName.trim()) {
+      alert('Please select or enter a valid bank name.');
+      return;
+    }
+
+    const isCreditCard = bankFormType === 'Credit Card';
+    
+    let parsedBalance = 0;
+    let parsedLimit = isCreditCard ? parseFloat(bankFormLimit || '0') : 0;
+    let parsedRemaining = isCreditCard ? parseFloat(bankFormRemainingLimit || '0') : 0;
+    
+    let savedAccountNumbers = [];
+    let savedBalances = [];
+
+    if (isCreditCard) {
+      if (isNaN(parsedLimit) || isNaN(parsedRemaining)) {
+        alert('Please enter valid credit card limit details.');
+        return;
+      }
+    } else {
+      const parsedBalancesArray = bankFormBalances.map(b => parseFloat(b || '0'));
+      for (let i = 0; i < parsedBalancesArray.length; i++) {
+        if (isNaN(parsedBalancesArray[i])) {
+          alert(`Please enter a valid balance for account #${i + 1}`);
+          return;
+        }
+      }
+      
+      savedAccountNumbers = [...bankFormAccountNumbers];
+      savedBalances = parsedBalancesArray;
+      parsedBalance = parsedBalancesArray.reduce((sum, val) => sum + val, 0);
+    }
+
+    onSave({
+      country: bankFormCountry,
+      bankName: bankFormName.trim(),
+      accountType: bankFormType,
+      currency: bankFormCurrency,
+      branch: bankFormBranch,
+      balance: parsedBalance,
+      limit: parsedLimit,
+      remainingLimit: parsedRemaining,
+      accountNumbers: savedAccountNumbers,
+      balances: savedBalances
+    });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
@@ -74,31 +126,15 @@ export const BankModal = ({
         {/* Modal Header */}
         <div className="bg-[#374151] px-6 py-4 flex items-center justify-between text-white border-b border-gray-600 flex-shrink-0">
           <button 
-            onClick={() => {
-              setIsBankModalOpen(false);
-              setEditingBankAccountId(null);
-              setBankFormCountry('Sri Lanka');
-              setBankFormName('');
-              setBankFormType('Savings');
-              setBankFormCurrency('LKR');
-              setBankFormBranch('');
-              setBankFormLimit('');
-              setBankFormRemainingLimit('');
-              setBankFormAccountNumbers(['']);
-              setBankFormBalances(['']);
-              
-              setShowAddCustomBank(false);
-              setShowAddCustomType(false);
-              setShowAddCustomBranch(false);
-            }} 
+            onClick={handleClose} 
             className="hover:opacity-80 transition-opacity"
           >
             <X className="w-7 h-7 bg-gray-500 rounded-full p-1" />
           </button>
           <h2 className="text-xl font-bold text-center flex-1" style={{ color: '#4FD1F5' }}>
-            {editingBankAccountId ? 'Edit Bank details' : 'Add New Bank'}
+            {editingAccount ? 'Edit Bank details' : 'Add New Bank'}
           </h2>
-          <button onClick={handleSaveBankAccount} className="hover:opacity-80 transition-opacity">
+          <button onClick={handleSave} className="hover:opacity-80 transition-opacity">
             <Save className="w-7 h-7 text-[#4FD1F5]" />
           </button>
         </div>

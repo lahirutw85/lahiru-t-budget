@@ -1,12 +1,11 @@
-import React from 'react';
 import { 
   Calendar, ChevronDown, Plus, Trash2, CircleDollarSign, 
   TrendingUp, TrendingDown, ShoppingCart, Wallet, Home, 
-  ArrowUpRight, ArrowDownRight, Briefcase, Star
+  ArrowUpRight, ArrowDownRight, Briefcase
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { convertCurrency, formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
-import { buildDonutData, sumByCurrency, groupByCategory } from '../../utils/chartUtils';
+import { buildDonutData } from '../../utils/chartUtils';
 
 export const DashboardView = ({
   COLORS,
@@ -22,7 +21,6 @@ export const DashboardView = ({
   filteredIncomes,
   prevExpenses,
   prevIncomes,
-  bankBalancesSumDefault,
   balancesByCurrency,
   activeCurrencies,
   currencies,
@@ -30,12 +28,15 @@ export const DashboardView = ({
   INCOME_CATEGORIES,
   isDarkMode
 }) => {
+  // Local array conversion for mapping and array iteration
+  const expensesArray = filteredExpenses.toArray();
+  const incomesArray = filteredIncomes.toArray();
+
   // ─── 1. RESOLVED CURRENCY CODE & SYMBOLS ──────────────────
   const defaultCurrencyObj = currencies.find(c => c.isDefault)
     || currencies.find(c => c.code === 'AED')
     || currencies[0]
     || { code: 'AED', symbol: 'AED' };
-  const currencySymbol = defaultCurrencyObj.symbol;
   const currencyCode   = defaultCurrencyObj.code;
 
   // Local helper to format currency with active currencies list
@@ -52,18 +53,18 @@ export const DashboardView = ({
   };
 
   // ─── 3. DERIVED COMPUTED VALUES ───────────────────────────
-  // Total amounts grouped by currency
-  const expensesSumByCurrency = sumByCurrency(filteredExpenses);
-  const incomesSumByCurrency  = sumByCurrency(filteredIncomes);
+  // Total amounts grouped by currency using collection methods
+  const expensesSumByCurrency = filteredExpenses.sumByCurrency();
+  const incomesSumByCurrency  = filteredIncomes.sumByCurrency();
 
   // Group by category THEN currency for breakdowns
-  const categoryTotalsByCurrency = groupByCategory(filteredExpenses);
-  const incomeCategoryTotalsByCurrency = groupByCategory(filteredIncomes);
+  const categoryTotalsByCurrency = filteredExpenses.groupByCategoryAndCurrency();
+  const incomeCategoryTotalsByCurrency = filteredIncomes.groupByCategoryAndCurrency();
 
   // Format Category Breakdowns
   const formatCategoryBreakdown = (catName) => {
     const breakdown = categoryTotalsByCurrency[catName] || {};
-    const entries = Object.entries(breakdown).filter(([_, val]) => val > 0);
+    const entries = Object.entries(breakdown).filter(([, val]) => val > 0);
     if (entries.length === 0) return formatCurrencyLocal(0, currencyCode);
     if (entries.length === 1) return formatCurrencyLocal(entries[0][1], entries[0][0]);
     return entries.map(([cur, val]) => formatCurrencyLocal(val, cur)).join(', ');
@@ -71,20 +72,14 @@ export const DashboardView = ({
 
   const formatIncomeCategoryBreakdown = (catName) => {
     const breakdown = incomeCategoryTotalsByCurrency[catName] || {};
-    const entries = Object.entries(breakdown).filter(([_, val]) => val > 0);
+    const entries = Object.entries(breakdown).filter(([, val]) => val > 0);
     if (entries.length === 0) return formatCurrencyLocal(0, currencyCode);
     if (entries.length === 1) return formatCurrencyLocal(entries[0][1], entries[0][0]);
     return entries.map(([cur, val]) => formatCurrencyLocal(val, cur)).join(', ');
   };
 
   // Group by category (Expense) converted to default currency
-  const categoryTotals = filteredExpenses.reduce((groups, exp) => {
-    const cat = exp.category || 'Other';
-    const txCurrency = exp.currency || 'AED';
-    const converted = convertCurrency(exp.amount, txCurrency, currencyCode);
-    groups[cat] = (groups[cat] || 0) + converted;
-    return groups;
-  }, {});
+  const categoryTotals = filteredExpenses.categoryTotalsInCurrency(currencyCode);
 
   const categoryColors = {
     'home/rent': COLORS.skyBlue,
@@ -104,21 +99,11 @@ export const DashboardView = ({
   const finalDonutData = buildDonutData(categoryTotals, 'expense', isDarkMode ? '#1F2937' : '#E5E7EB');
 
   // Total expenditure in default currency
-  const totalExpenditure = filteredExpenses.reduce((sum, exp) => {
-    const txCurrency = exp.currency || 'AED';
-    const converted = convertCurrency(exp.amount, txCurrency, currencyCode);
-    return sum + converted;
-  }, 0);
+  const totalExpenditure = filteredExpenses.totalInCurrency(currencyCode);
   const formattedTotalExpenditure = formatCurrencyLocal(totalExpenditure, currencyCode);
 
   // Group by category (Income) converted to default currency
-  const incomeCategoryTotals = filteredIncomes.reduce((groups, inc) => {
-    const cat = inc.category || 'Other';
-    const txCurrency = inc.currency || 'AED';
-    const converted = convertCurrency(inc.amount, txCurrency, currencyCode);
-    groups[cat] = (groups[cat] || 0) + converted;
-    return groups;
-  }, {});
+  const incomeCategoryTotals = filteredIncomes.categoryTotalsInCurrency(currencyCode);
 
   const incomeCategoryColors = {
     'salary': COLORS.green,
@@ -128,24 +113,13 @@ export const DashboardView = ({
     'others': COLORS.yellow,
   };
 
-  const totalIncomeValue = filteredIncomes.reduce((sum, inc) => {
-    const txCurrency = inc.currency || 'AED';
-    const converted = convertCurrency(inc.amount, txCurrency, currencyCode);
-    return sum + converted;
-  }, 0);
+  const totalIncomeValue = filteredIncomes.totalInCurrency(currencyCode);
   const formattedTotalIncomeValue = formatCurrencyLocal(totalIncomeValue, currencyCode);
 
   // Previous month's totals & changes
-  const prevTotalExpenditure = prevExpenses.reduce((sum, exp) => {
-    const txCurrency = exp.currency || 'AED';
-    const converted = convertCurrency(exp.amount, txCurrency, currencyCode);
-    return sum + converted;
-  }, 0);
-  const prevTotalIncomeValue = prevIncomes.reduce((sum, inc) => {
-    const txCurrency = inc.currency || 'AED';
-    const converted = convertCurrency(inc.amount, txCurrency, currencyCode);
-    return sum + converted;
-  }, 0);
+  const prevTotalExpenditure = prevExpenses.totalInCurrency(currencyCode);
+  const prevTotalIncomeValue = prevIncomes.totalInCurrency(currencyCode);
+  
   // Correctly compute current In Hand sum from balancesByCurrency converted to default currency
   const currentInHand = Object.entries(balancesByCurrency).reduce((sum, [cur, bal]) => {
     return sum + convertCurrency(bal, cur, currencyCode);
@@ -194,14 +168,10 @@ export const DashboardView = ({
 
   // Highest Expense Category
   let highestCategoryName = 'None';
-  let highestCategoryAmount = 0;
   if (Object.keys(categoryTotals).length > 0) {
     const sortedCategories = Object.keys(categoryTotals).sort((a, b) => categoryTotals[b] - categoryTotals[a]);
     highestCategoryName = sortedCategories[0];
-    highestCategoryAmount = categoryTotals[highestCategoryName];
   }
-  const formattedHighestCategoryAmount = formatCurrencyLocal(highestCategoryAmount, currencyCode);
-
   // Dynamic major outgoings
   const majorOutgoings = Object.keys(categoryTotals).map(catName => {
     const amount = categoryTotals[catName];
@@ -281,8 +251,8 @@ export const DashboardView = ({
   };
 
   const renderSingleDonutChart = (cur, type = 'expense') => {
-    const items = type === 'income' ? filteredIncomes : filteredExpenses;
-    const categoryTotalsForCurrency = items.reduce((groups, item) => {
+    const itemsArray = type === 'income' ? incomesArray : expensesArray;
+    const categoryTotalsForCurrency = itemsArray.reduce((groups, item) => {
       const txCurrency = item.currency || 'AED';
       if (txCurrency === cur) {
         const cat = item.category || 'Other';
@@ -485,14 +455,10 @@ export const DashboardView = ({
           {highestCategoryName === 'None' ? (
             <div className="text-2xl font-bold" style={{ color: COLORS.textPrimary }}>{formatCurrencyLocal(0, currencyCode)}</div>
           ) : (
-            renderMultiCurrencySum((() => {
-              const sumData = {};
-              filteredExpenses.filter(e => e.category === highestCategoryName).forEach(exp => {
-                const cur = exp.currency || 'AED';
-                sumData[cur] = (sumData[cur] || 0) + exp.amount;
-              });
-              return sumData;
-            })(), { color: COLORS.textPrimary })
+            renderMultiCurrencySum(
+              filteredExpenses.filter(e => e.category === highestCategoryName).sumByCurrency(),
+              { color: COLORS.textPrimary }
+            )
           )}
         </div>
       </div>
@@ -709,14 +675,14 @@ export const DashboardView = ({
               </tr>
             </thead>
             <tbody>
-              {filteredExpenses.length === 0 ? (
+              {expensesArray.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="py-6 text-center font-medium" style={{ color: COLORS.textSecondary }}>
                     No recent expenses entered.
                   </td>
                 </tr>
               ) : (
-                filteredExpenses.slice(0, 5).map((exp) => {
+                expensesArray.slice(0, 5).map((exp) => {
                   const rowStyle = getCurrencyRowStyle(exp.currency || 'AED', isDarkMode);
                   return (
                     <tr key={exp.id} className="border-b transition-colors hover:opacity-90" style={{ ...rowStyle, borderColor: COLORS.border }}>

@@ -1,8 +1,7 @@
-import React from 'react';
 import { Calendar, ChevronDown, Plus, CircleDollarSign, Edit2, Trash2 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { convertCurrency, formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
-import { buildDonutData, sumByCurrency } from '../../utils/chartUtils';
+import { formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
+import { buildDonutData } from '../../utils/chartUtils';
 
 export const IncomeView = ({
   COLORS,
@@ -46,17 +45,14 @@ export const IncomeView = ({
     return foundIncome ? foundIncome.icon : CircleDollarSign;
   };
 
+  // Local array conversion for mapping and array iteration
+  const incomesArray = filteredIncomes.toArray();
+
   // ─── 2. DERIVED VALUES ────────────────────────────────────
-  const incomesSumByCurrency = sumByCurrency(filteredIncomes);
+  const incomesSumByCurrency = filteredIncomes.sumByCurrency();
 
   // Group by category converted to default currency
-  const incomeCategoryTotals = filteredIncomes.reduce((groups, inc) => {
-    const cat = inc.category || 'Other';
-    const txCurrency = inc.currency || 'AED';
-    const converted = convertCurrency(inc.amount, txCurrency, currencyCode);
-    groups[cat] = (groups[cat] || 0) + converted;
-    return groups;
-  }, {});
+  const incomeCategoryTotals = filteredIncomes.categoryTotalsInCurrency(currencyCode);
 
   const incomeCategoryColors = {
     'salary': COLORS.green,
@@ -118,15 +114,15 @@ export const IncomeView = ({
     );
   };
 
-  const renderSingleDonutChart = (cur, type = 'income') => {
-    const categoryTotalsForCurrency = filteredIncomes.reduce((groups, item) => {
+  const renderSingleDonutChart = (cur) => {
+    const categoryTotalsForCurrency = {};
+    incomesArray.forEach(item => {
       const txCurrency = item.currency || 'AED';
       if (txCurrency === cur) {
         const cat = item.category || 'Other';
-        groups[cat] = (groups[cat] || 0) + item.amount;
+        categoryTotalsForCurrency[cat] = (categoryTotalsForCurrency[cat] || 0) + item.amount;
       }
-      return groups;
-    }, {});
+    });
 
     const dynamicDonutDataForCurrency = Object.keys(categoryTotalsForCurrency).map(cat => {
       const key = cat.toLowerCase();
@@ -303,7 +299,7 @@ export const IncomeView = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto max-h-[500px] pr-1">
-              {activeCurrencies.map(cur => renderSingleDonutChart(cur, 'income'))}
+              {activeCurrencies.map(cur => renderSingleDonutChart(cur))}
             </div>
           )}
         </div>
@@ -327,7 +323,7 @@ export const IncomeView = ({
               </tr>
             </thead>
             <tbody>
-              {filteredIncomes.map((inc) => {
+              {incomesArray.map((inc) => {
                 const IncIcon = getIconForCategory(inc.category);
                 const rowStyle = getCurrencyRowStyle(inc.currency || 'AED', isDarkMode);
                 return (
