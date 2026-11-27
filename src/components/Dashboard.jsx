@@ -1051,7 +1051,6 @@ const Dashboard = () => {
     { name: 'Bills', icon: Calendar, color: COLORS.purple },
     { name: 'Budget', icon: Folder, color: COLORS.orange },
     { name: 'Reports', icon: Presentation, color: COLORS.orange },
-    { name: 'Search', icon: Search, color: COLORS.red },
   ];
 
   // Keep expense categories synchronized with Budget categories + Medical + Misc/Other
