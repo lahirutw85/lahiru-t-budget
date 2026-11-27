@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Calendar, ChevronDown, Plus, X, Landmark, Trash2, Repeat } from 'lucide-react';
-import { formatCurrency } from '../../utils/currencyUtils';
-import { DEFAULT_BILLS } from '../../utils/budgetUtils';
+import { Calendar, ChevronDown, Plus, X, Landmark, Trash2, Repeat, CheckCircle2 } from 'lucide-react';
+import { formatCurrency, getTodayDateString } from '../../utils/currencyUtils';
+import { DEFAULT_BILLS, getBillAmountForPeriodKey } from '../../utils/budgetUtils';
 
 /**
  * BillsView
@@ -23,6 +23,8 @@ export const BillsView = ({
   years,
   ALL_MONTHS,
   computedBankAccounts = [],
+  onRecordPaidExpense,
+  onRemovePaidExpense,
 }) => {
   const defaultCurrencyObj = currencies.find(c => c.isDefault)
     || currencies.find(c => c.code === 'AED')
@@ -42,11 +44,34 @@ export const BillsView = ({
     return DEFAULT_BILLS;
   }, [bills]);
 
-  const getBillAmountForPeriod = (bill) => {
-    if (bill.monthlyOverrides && Object.prototype.hasOwnProperty.call(bill.monthlyOverrides, periodKey)) {
-      return parseFloat(bill.monthlyOverrides[periodKey]) || 0;
+  const getBillAmountForPeriod = (bill) => getBillAmountForPeriodKey(bill, periodKey);
+
+  const handleTogglePaidBill = (e, bill) => {
+    e.stopPropagation();
+    const amount = getBillAmountForPeriod(bill);
+    if (amount <= 0) return;
+
+    const existingExpenseId = bill.paidMonths?.[periodKey];
+    const nextPaidMonths = { ...(bill.paidMonths || {}) };
+    const todayStr = getTodayDateString();
+    const paymentDate = todayStr.startsWith(periodKey) ? todayStr : `${periodKey}-01`;
+
+    if (existingExpenseId) {
+      if (onRemovePaidExpense) onRemovePaidExpense(existingExpenseId);
+      delete nextPaidMonths[periodKey];
+    } else if (onRecordPaidExpense) {
+      const expenseId = onRecordPaidExpense({
+        date: paymentDate,
+        category: bill.name,
+        subCategory: 'Bill',
+        amount,
+        bankAccount: bill.bankAccount || '',
+        notes: `Bill payment (${activeMonth} ${selectedYear})`,
+      });
+      nextPaidMonths[periodKey] = expenseId;
     }
-    return parseFloat(bill.defaultAmount) || 0;
+
+    setBills(billsList.map(b => (b.id === bill.id ? { ...b, paidMonths: nextPaidMonths } : b)));
   };
 
   // Build flat list of bank account options from existing computedBankAccounts
@@ -274,8 +299,27 @@ export const BillsView = ({
                   )}
                 </div>
 
-                <div className="text-right shrink-0 font-bold text-base" style={{ color: COLORS.textPrimary }}>
-                  {formatCurrency(amountForMonth, currencyCode, currencies)}
+                <div className="flex items-center gap-3 shrink-0">
+                  {amountForMonth > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleTogglePaidBill(e, bill)}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-opacity hover:opacity-85 cursor-pointer"
+                      style={{
+                        backgroundColor: bill.paidMonths?.[periodKey] ? 'rgba(16, 185, 129, 0.15)' : COLORS.bgMain,
+                        borderColor: bill.paidMonths?.[periodKey] ? COLORS.green : COLORS.border,
+                        color: bill.paidMonths?.[periodKey] ? COLORS.green : COLORS.textSecondary,
+                      }}
+                      title={bill.paidMonths?.[periodKey] ? 'Click to unmark paid' : 'Mark as paid & add to monthly spending'}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {bill.paidMonths?.[periodKey] ? 'Paid' : 'Mark Paid'}
+                    </button>
+                  )}
+                  <div className="text-right font-bold text-base" style={{ color: COLORS.textPrimary }}>
+                    {formatCurrency(amountForMonth, currencyCode, currencies)}
+                  </div>
                 </div>
               </div>
             );

@@ -14,6 +14,7 @@ const makeSub = (id, name, defaultAmount = 0, bankAccount = '') => ({
   defaultAmount,
   monthlyOverrides: {},
   forwardChanges: {},
+  paidMonths: {},
   bankAccount,
   startPeriod: '',
   endPeriod: '',
@@ -119,6 +120,7 @@ export const normalizeBudgetCategories = (rawCategories) => {
       defaultAmount: baseAmount,
       monthlyOverrides: cat.monthlyOverrides || {},
       forwardChanges: cat.forwardChanges || {},
+      paidMonths: cat.paidMonths || {},
       startPeriod: cat.startPeriod || '',
       endPeriod: cat.endPeriod || '',
       loanTotalAmount: parseFloat(cat.loanTotalAmount || 0) || 0,
@@ -128,6 +130,7 @@ export const normalizeBudgetCategories = (rawCategories) => {
         defaultAmount: parseFloat(s.defaultAmount ?? s.amount ?? 0) || 0,
         monthlyOverrides: s.monthlyOverrides || {},
         forwardChanges: s.forwardChanges || {},
+        paidMonths: s.paidMonths || {},
         startPeriod: s.startPeriod || '',
         endPeriod: s.endPeriod || '',
         loanTotalAmount: parseFloat(s.loanTotalAmount || 0) || 0,
@@ -208,9 +211,32 @@ export const formatPeriodLabel = (periodKey) => {
 };
 
 export const DEFAULT_BILLS = [
-  { id: 'bill-mobile', name: 'Mobile', defaultAmount: 0, monthlyOverrides: {}, bankAccount: '', dueDay: '' },
-  { id: 'bill-house-rent', name: 'House Rent', defaultAmount: 0, monthlyOverrides: {}, bankAccount: '', dueDay: '' },
+  { id: 'bill-mobile', name: 'Mobile', defaultAmount: 0, monthlyOverrides: {}, paidMonths: {}, bankAccount: '', dueDay: '' },
+  { id: 'bill-house-rent', name: 'House Rent', defaultAmount: 0, monthlyOverrides: {}, paidMonths: {}, bankAccount: '', dueDay: '' },
 ];
+
+export const getBillAmountForPeriodKey = (bill, periodKey) => {
+  if (!bill) return 0;
+  if (bill.monthlyOverrides && Object.prototype.hasOwnProperty.call(bill.monthlyOverrides, periodKey)) {
+    return parseFloat(bill.monthlyOverrides[periodKey]) || 0;
+  }
+  return parseFloat(bill.defaultAmount) || 0;
+};
+
+export const resolveBillsTotalForSelection = (bills, selectedYear, selectedMonth, allMonths) => {
+  const list = Array.isArray(bills) && bills.length > 0 ? bills : DEFAULT_BILLS;
+  if (selectedMonth === 'Full Year') {
+    let total = 0;
+    for (let m = 1; m <= 12; m++) {
+      const pk = `${selectedYear}-${String(m).padStart(2, '0')}`;
+      total += list.reduce((sum, b) => sum + getBillAmountForPeriodKey(b, pk), 0);
+    }
+    return total;
+  }
+  const idx = allMonths.indexOf(selectedMonth);
+  const pk = `${selectedYear}-${String((idx >= 0 ? idx : new Date().getMonth()) + 1).padStart(2, '0')}`;
+  return list.reduce((sum, b) => sum + getBillAmountForPeriodKey(b, pk), 0);
+};
 
 /**
  * Given a startPeriod ('YYYY-MM') and total months to pay (>= 1),

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Folder, TrendingUp, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
-import { formatCurrency } from '../../utils/currencyUtils';
+import { Folder, TrendingUp, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar, CheckCircle2 } from 'lucide-react';
+import { formatCurrency, getTodayDateString } from '../../utils/currencyUtils';
 import {
   normalizeBudgetCategories,
   resolveItemAmountForPeriod,
@@ -69,6 +69,8 @@ export const BudgetView = ({
   dashboardFilteredIncomes,
   dashboardFilteredExpenses,
   computedBankAccounts = [],
+  onRecordPaidExpense,
+  onRemovePaidExpense,
 }) => {
   const defaultCurrencyObj = currencies.find(c => c.isDefault)
     || currencies.find(c => c.code === 'AED')
@@ -334,6 +336,75 @@ export const BudgetView = ({
     setEditingSubTarget(null);
   };
 
+  const getPaymentDateForPeriod = () => {
+    const todayStr = getTodayDateString();
+    return todayStr.startsWith(periodKey) ? todayStr : `${periodKey}-01`;
+  };
+
+  const handleTogglePaidCategory = (e, cat) => {
+    e.stopPropagation();
+    const amount = resolveCategoryTotalForPeriod(cat, periodKey);
+    if (amount <= 0) return;
+
+    const existingExpenseId = cat.paidMonths?.[periodKey];
+    const nextPaidMonths = { ...(cat.paidMonths || {}) };
+
+    if (existingExpenseId) {
+      if (onRemovePaidExpense) onRemovePaidExpense(existingExpenseId);
+      delete nextPaidMonths[periodKey];
+    } else if (onRecordPaidExpense) {
+      const expenseId = onRecordPaidExpense({
+        date: getPaymentDateForPeriod(),
+        category: cat.name,
+        subCategory: cat.name,
+        amount,
+        bankAccount: cat.bankAccount || '',
+        notes: `Budget payment (${activeMonth} ${selectedYear})`,
+      });
+      nextPaidMonths[periodKey] = expenseId;
+    }
+
+    persistCategories(
+      categories.map(c => (c.id === cat.id ? { ...c, paidMonths: nextPaidMonths } : c))
+    );
+  };
+
+  const handleTogglePaidSubCategory = (e, cat, sub) => {
+    e.stopPropagation();
+    const amount = resolveItemAmountForPeriod(sub, periodKey);
+    if (amount <= 0) return;
+
+    const existingExpenseId = sub.paidMonths?.[periodKey];
+    const nextPaidMonths = { ...(sub.paidMonths || {}) };
+
+    if (existingExpenseId) {
+      if (onRemovePaidExpense) onRemovePaidExpense(existingExpenseId);
+      delete nextPaidMonths[periodKey];
+    } else if (onRecordPaidExpense) {
+      const expenseId = onRecordPaidExpense({
+        date: getPaymentDateForPeriod(),
+        category: cat.name,
+        subCategory: sub.name,
+        amount,
+        bankAccount: sub.bankAccount || '',
+        notes: `Budget payment: ${sub.name} (${activeMonth} ${selectedYear})`,
+      });
+      nextPaidMonths[periodKey] = expenseId;
+    }
+
+    persistCategories(
+      categories.map(c => {
+        if (c.id !== cat.id) return c;
+        return {
+          ...c,
+          subCategories: (c.subCategories || []).map(s =>
+            s.id === sub.id ? { ...s, paidMonths: nextPaidMonths } : s
+          ),
+        };
+      })
+    );
+  };
+
   return (
     <div className="max-w-[1000px] mx-auto space-y-6">
       {/* Header & Month/Year Selector */}
@@ -462,8 +533,27 @@ export const BudgetView = ({
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0 font-bold text-base" style={{ color: COLORS.textPrimary }}>
-                    {formatCurrency(catTotal, currencyCode, currencies)}
+                  <div className="flex items-center gap-3 shrink-0">
+                    {!hasSubs && catTotal > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleTogglePaidCategory(e, cat)}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-opacity hover:opacity-85 cursor-pointer"
+                        style={{
+                          backgroundColor: cat.paidMonths?.[periodKey] ? 'rgba(16, 185, 129, 0.15)' : COLORS.bgMain,
+                          borderColor: cat.paidMonths?.[periodKey] ? COLORS.green : COLORS.border,
+                          color: cat.paidMonths?.[periodKey] ? COLORS.green : COLORS.textSecondary,
+                        }}
+                        title={cat.paidMonths?.[periodKey] ? 'Click to unmark paid' : 'Mark as paid & add to monthly spending'}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {cat.paidMonths?.[periodKey] ? 'Paid' : 'Mark Paid'}
+                      </button>
+                    )}
+                    <div className="text-right font-bold text-base" style={{ color: COLORS.textPrimary }}>
+                      {formatCurrency(catTotal, currencyCode, currencies)}
+                    </div>
                   </div>
                 </div>
 
@@ -525,8 +615,27 @@ export const BudgetView = ({
                               </div>
                             )}
                           </div>
-                          <div className="text-right shrink-0 text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
-                            {formatCurrency(subVal, currencyCode, currencies)}
+                          <div className="flex items-center gap-3 shrink-0">
+                            {subVal > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleTogglePaidSubCategory(e, cat, sub)}
+                                onDoubleClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-opacity hover:opacity-85 cursor-pointer"
+                                style={{
+                                  backgroundColor: sub.paidMonths?.[periodKey] ? 'rgba(16, 185, 129, 0.15)' : COLORS.bgCard,
+                                  borderColor: sub.paidMonths?.[periodKey] ? COLORS.green : COLORS.border,
+                                  color: sub.paidMonths?.[periodKey] ? COLORS.green : COLORS.textSecondary,
+                                }}
+                                title={sub.paidMonths?.[periodKey] ? 'Click to unmark paid' : 'Mark as paid & add to monthly spending'}
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                {sub.paidMonths?.[periodKey] ? 'Paid' : 'Mark Paid'}
+                              </button>
+                            )}
+                            <div className="text-right text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
+                              {formatCurrency(subVal, currencyCode, currencies)}
+                            </div>
                           </div>
                         </div>
                       );

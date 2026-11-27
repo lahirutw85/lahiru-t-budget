@@ -151,8 +151,13 @@ const INITIAL_CATEGORIES = [
 // ================================================================
 const Dashboard = () => {
   // ── Date/Period helpers ────────────────────────────────────────
-  const currentYearStr  = new Date().getFullYear().toString();
+  const currentYearNum  = new Date().getFullYear();
+  const currentYearStr  = currentYearNum.toString();
   const currentMonthStr = ALL_MONTHS[new Date().getMonth()];
+  const getRollingYears = () => {
+    const y = new Date().getFullYear();
+    return [y - 1, y, y + 1, y + 2, y + 3].map(String);
+  };
 
   // ── §7a: STATE VARIABLES ─────────────────────────────────────
 
@@ -174,7 +179,7 @@ const Dashboard = () => {
   };
 
   // Date/Period selectors — used to filter expenses & incomes by month/year/day
-  const [years,         setYears]         = useState([currentYearStr]);
+  const [years,         setYears]         = useState(() => getRollingYears());
   const [selectedYear,  setSelectedYear]  = useState(currentYearStr);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
   const [selectedDay,   setSelectedDay]   = useState('Full Month');
@@ -370,12 +375,11 @@ const Dashboard = () => {
       setIncomes(hydratedInc);
 
       const uniqueYears = Array.from(new Set([
+        ...getRollingYears(),
         ...hydratedExp.map(e => e.date?.split('-')[0]),
         ...hydratedInc.map(i => i.date?.split('-')[0]),
       ].filter(Boolean)));
-      const currentYear = new Date().getFullYear().toString();
-      if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
-      setYears(uniqueYears.sort((a, b) => b - a));
+      setYears(uniqueYears.sort((a, b) => Number(a) - Number(b)));
 
       // 3. Bank Accounts
       const bankData = await fetchBankAccounts();
@@ -556,6 +560,49 @@ const Dashboard = () => {
       setIncomes(updated);
       syncIncomesToDatabase(updated);
     }
+  };
+
+  const resolveAccountForPayment = (bankAccountStr) => {
+    if (!bankAccountStr || bankAccountStr === 'Cash') {
+      return { account: 'Cash', bankName: '' };
+    }
+    const matchedCard = computedBankAccounts.find(acc => {
+      if (acc.accountType !== 'Credit Card') return false;
+      let base = `${acc.bankName} (${acc.accountType}`;
+      if (acc.branch) base += ` - ${acc.branch}`;
+      return bankAccountStr.toLowerCase().startsWith(base.toLowerCase());
+    });
+    return {
+      account: matchedCard ? 'Credit Card' : 'Bank Account',
+      bankName: bankAccountStr,
+    };
+  };
+
+  const handleRecordPaidExpense = ({ date, category, subCategory, amount, bankAccount, notes }) => {
+    const { account, bankName } = resolveAccountForPayment(bankAccount);
+    const saved = budgetService.saveTransaction('expense', null, {
+      date,
+      category,
+      subCategory,
+      amount,
+      currency: currencyCode,
+      account,
+      bankName,
+      notes,
+      icon: getIconForCategory(category),
+    });
+    const updatedExpenses = budgetService.expenses.map(e => e.toJSON());
+    setExpenses(updatedExpenses);
+    syncExpensesToDatabase(updatedExpenses);
+    return saved.id;
+  };
+
+  const handleRemovePaidExpense = (expenseId) => {
+    if (!expenseId) return;
+    budgetService.deleteTransaction('expense', expenseId);
+    const updatedExpenses = budgetService.expenses.map(e => e.toJSON());
+    setExpenses(updatedExpenses);
+    syncExpensesToDatabase(updatedExpenses);
   };
 
   const handleStartAddCategory = () => {
@@ -975,7 +1022,9 @@ const Dashboard = () => {
               INCOME_CATEGORIES={INCOME_CATEGORIES}
               isDarkMode={isDarkMode}
               plannedBudget={plannedBudget}
+              bills={bills}
               onEditBudget={() => setActiveMenu('Budget')}
+              onEditBills={() => setActiveMenu('Bills')}
             />
           ) : activeMenu === 'Expenses' ? (
             <ExpensesView
@@ -1044,6 +1093,8 @@ const Dashboard = () => {
               years={years}
               ALL_MONTHS={ALL_MONTHS}
               computedBankAccounts={computedBankAccounts}
+              onRecordPaidExpense={handleRecordPaidExpense}
+              onRemovePaidExpense={handleRemovePaidExpense}
             />
           ) : activeMenu === 'Budget' ? (
             <BudgetView
@@ -1060,6 +1111,8 @@ const Dashboard = () => {
               dashboardFilteredIncomes={dashboardFilteredIncomes}
               dashboardFilteredExpenses={dashboardFilteredExpenses}
               computedBankAccounts={computedBankAccounts}
+              onRecordPaidExpense={handleRecordPaidExpense}
+              onRemovePaidExpense={handleRemovePaidExpense}
             />
           ) : (
             <div className="max-w-7xl mx-auto text-left">

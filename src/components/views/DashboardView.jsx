@@ -6,7 +6,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { convertCurrency, formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
 import { buildDonutData } from '../../utils/chartUtils';
-import { normalizeBudgetCategories, resolveCategoryTotalForPeriod, resolveExpensesBudgetForSelection } from '../../utils/budgetUtils';
+import { normalizeBudgetCategories, resolveCategoryTotalForPeriod, resolveExpensesBudgetForSelection, DEFAULT_BILLS, getBillAmountForPeriodKey, resolveBillsTotalForSelection } from '../../utils/budgetUtils';
 
 export const DashboardView = ({
   COLORS,
@@ -31,7 +31,9 @@ export const DashboardView = ({
   INCOME_CATEGORIES,
   isDarkMode,
   plannedBudget = { income: 0, expenses: 0 },
-  onEditBudget
+  bills = [],
+  onEditBudget,
+  onEditBills
 }) => {
   // Local array conversion for mapping and array iteration
   const expensesArray = filteredExpenses.toArray();
@@ -208,6 +210,33 @@ export const DashboardView = ({
         amount = resolveCategoryTotalForPeriod(cat, pk);
       }
       return { id: cat.id, name: cat.name, amount };
+    })
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5);
+
+  // Bills Details: full bills amount + top 5 bills for the selected period
+  const fullBillsAmount = resolveBillsTotalForSelection(bills, selectedYear, selectedMonth, ALL_MONTHS);
+  const billsSource = Array.isArray(bills) && bills.length > 0 ? bills : DEFAULT_BILLS;
+  const currentPeriodKeyForBills = selectedMonth === 'Full Year'
+    ? `${selectedYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+    : `${selectedYear}-${String((ALL_MONTHS.indexOf(selectedMonth) >= 0 ? ALL_MONTHS.indexOf(selectedMonth) : new Date().getMonth()) + 1).padStart(2, '0')}`;
+  const topBills = billsSource
+    .map(bill => {
+      let amount = 0;
+      if (selectedMonth === 'Full Year') {
+        for (let m = 1; m <= 12; m++) {
+          const pk = `${selectedYear}-${String(m).padStart(2, '0')}`;
+          amount += getBillAmountForPeriodKey(bill, pk);
+        }
+      } else {
+        amount = getBillAmountForPeriodKey(bill, currentPeriodKeyForBills);
+      }
+      return {
+        id: bill.id,
+        name: bill.name,
+        amount,
+        isPaid: Boolean(bill.paidMonths?.[currentPeriodKeyForBills]),
+      };
     })
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
@@ -498,11 +527,11 @@ export const DashboardView = ({
         </div>
       </div>
 
-      {/* Row 2: Income vs Expenses & Savings */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Row 2: Income vs Expenses */}
+      <div className="grid grid-cols-1 gap-6">
         
-        {/* Income vs Expenses (col-span-2) */}
-        <div className="lg:col-span-2 p-6 rounded-2xl border flex flex-col" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
+        {/* Income vs Expenses */}
+        <div className="p-6 rounded-2xl border flex flex-col" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-lg font-bold" style={{ color: COLORS.textPrimary }}>Income vs Expenses</h2>
             <div className="flex gap-4 text-xs font-medium" style={{ color: COLORS.textPrimary }}>
@@ -562,7 +591,10 @@ export const DashboardView = ({
             </div>
           </div>
         </div>
+      </div>
 
+      {/* Row 2b: Budget Allocations & Bills Details */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Budget Allocations */}
         <div className="p-6 rounded-2xl border flex flex-col justify-between" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
           <div>
@@ -594,6 +626,57 @@ export const DashboardView = ({
               <button
                 type="button"
                 onClick={onEditBudget}
+                className="font-semibold hover:opacity-80 cursor-pointer"
+                style={{ color: COLORS.skyBlue }}
+              >
+                View All →
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bills Details */}
+        <div className="p-6 rounded-2xl border flex flex-col justify-between" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-6">
+              <h2 className="text-sm font-bold tracking-wider" style={{ color: COLORS.textPrimary }}>
+                BILLS DETAILS
+              </h2>
+              <span className="text-xs font-bold" style={{ color: COLORS.purple }}>
+                {formatCurrencyLocal(fullBillsAmount, currencyCode)}
+              </span>
+            </div>
+            <div className="space-y-4">
+              {topBills.map((item, idx) => (
+                <div key={item.id || idx} className="flex justify-between items-center text-sm font-medium">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: item.isPaid ? COLORS.green : COLORS.purple }}
+                    ></div>
+                    <span className="truncate" style={{ color: COLORS.textPrimary }}>{item.name}</span>
+                    {item.isPaid && (
+                      <span
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase"
+                        style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: COLORS.green }}
+                      >
+                        Paid
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 font-semibold" style={{ color: COLORS.textPrimary }}>
+                    {formatCurrencyLocal(item.amount, currencyCode)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {onEditBills && (
+            <div className="pt-4 mt-4 border-t flex justify-between items-center text-xs" style={{ borderColor: COLORS.border }}>
+              <span style={{ color: COLORS.textSecondary }}>Monthly Recurring Bills</span>
+              <button
+                type="button"
+                onClick={onEditBills}
                 className="font-semibold hover:opacity-80 cursor-pointer"
                 style={{ color: COLORS.skyBlue }}
               >
