@@ -163,7 +163,7 @@ export const DashboardView = ({
   }).sort((a, b) => b.amount - a.amount);
 
   const finalIncomeSources = dynamicIncomeSources.length > 0 ? dynamicIncomeSources : [
-    { name: 'Salary', icon: Briefcase, pct: 100, amount: 0 },
+    { name: 'No Income yet', icon: Briefcase, pct: 0, amount: 0 },
   ];
 
   // Highest Expense Category
