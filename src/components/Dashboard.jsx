@@ -68,6 +68,7 @@ import {
   Folder,
   Menu,
   Presentation,
+  User,
 } from 'lucide-react';
 
 // Modular Layouts, Views, and Modals
@@ -84,6 +85,7 @@ import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
 import { CategoryManagerModal } from './modals/CategoryManagerModal';
+import { ProfileModal } from './modals/ProfileModal';
 import { Login } from './Login';
 
 
@@ -163,15 +165,19 @@ const Dashboard = () => {
     if (hasSupabase()) return false;
     return sessionStorage.getItem('isLoggedIn') === 'true';
   });
+  const [currentUser, setCurrentUser] = useState(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     if (!hasSupabase() || !supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       setIsLoggedIn(Boolean(session));
+      setCurrentUser(session?.user || null);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(Boolean(session));
+      setCurrentUser(session?.user || null);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -182,6 +188,7 @@ const Dashboard = () => {
     }
     sessionStorage.removeItem('isLoggedIn');
     setIsLoggedIn(false);
+    setCurrentUser(null);
     setIsDataLoaded(false);
     setProfileDropdownOpen(false);
   };
@@ -354,7 +361,12 @@ const Dashboard = () => {
     return hydrateIncomeCategories(parsed?.incomeCategories);
   });
 
-  // Persist all custom bank lists, planning budget, bills, recurring incomes, and income categories to settings in cloud
+  const [userProfile, setUserProfile] = useState(() => {
+    const parsed = safeJsonParse(localStorage.getItem('budget_settings'), {});
+    return parsed?.userProfile && typeof parsed.userProfile === 'object' ? parsed.userProfile : { nickname: '', avatarUrl: '' };
+  });
+
+  // Persist all custom bank lists, planning budget, bills, recurring incomes, income categories, and user profile to settings in cloud
   useEffect(() => {
     if (!isDataLoaded) return;
     syncSettings({
@@ -365,8 +377,9 @@ const Dashboard = () => {
       bills,
       recurringIncomes,
       incomeCategories: serializeIncomeCategories(incomeCategories),
+      userProfile,
     });
-  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, recurringIncomes, incomeCategories, isDataLoaded]);
+  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, recurringIncomes, incomeCategories, userProfile, isDataLoaded]);
 
 
 
@@ -510,6 +523,12 @@ const Dashboard = () => {
         }
         if (Array.isArray(settingsData.incomeCategories) && settingsData.incomeCategories.length > 0) {
           setIncomeCategories(hydrateIncomeCategories(settingsData.incomeCategories));
+        }
+        if (settingsData.userProfile && typeof settingsData.userProfile === 'object') {
+          setUserProfile({
+            nickname: settingsData.userProfile.nickname || '',
+            avatarUrl: settingsData.userProfile.avatarUrl || '',
+          });
         }
       }
       setIsDataLoaded(true);
@@ -1134,10 +1153,14 @@ const Dashboard = () => {
                 style={{ borderColor: COLORS.border }}
               >
                 <div className="hidden sm:flex flex-col items-end">
-                  <span className="text-sm font-bold transition-colors group-hover:text-[#4FD1F5]" style={{ color: COLORS.textPrimary }}>Lahiru T</span>
-                  <span className="text-xs text-right" style={{ color: COLORS.textSecondary }}>Premium User</span>
+                  <span className="text-sm font-bold transition-colors group-hover:text-[#4FD1F5]" style={{ color: COLORS.textPrimary }}>
+                    {userProfile?.nickname || currentUser?.user_metadata?.nickname || (currentUser?.email ? currentUser.email.split('@')[0] : 'Lahiru T')}
+                  </span>
+                  <span className="text-xs text-right max-w-[160px] truncate" style={{ color: COLORS.textSecondary }}>
+                    {currentUser?.email || 'Personal Account'}
+                  </span>
                 </div>
-                <img src={userProfileImg} alt="Profile" className="w-9 h-9 rounded-full object-cover ring-2 ring-transparent group-hover:ring-[#4FD1F5] transition-all" />
+                <img src={userProfile?.avatarUrl || userProfileImg} alt="Profile" className="w-9 h-9 rounded-full object-cover ring-2 ring-transparent group-hover:ring-[#4FD1F5] transition-all" />
               </button>
 
               {profileDropdownOpen && (
@@ -1147,7 +1170,7 @@ const Dashboard = () => {
                     onClick={() => setProfileDropdownOpen(false)}
                   />
                   <div 
-                    className="absolute right-0 mt-2 w-48 rounded-xl border shadow-xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+                    className="absolute right-0 mt-2 w-56 rounded-xl border shadow-xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200"
                     style={{ 
                       backgroundColor: COLORS.bgCard, 
                       borderColor: COLORS.border,
@@ -1156,8 +1179,22 @@ const Dashboard = () => {
                   >
                     <div className="px-3 py-2 border-b mb-1" style={{ borderColor: COLORS.border }}>
                       <p className="text-xs font-semibold" style={{ color: COLORS.textSecondary }}>Signed in as</p>
-                      <p className="text-sm font-bold truncate" style={{ color: COLORS.textPrimary }}>lahirut85</p>
+                      <p className="text-sm font-bold truncate" style={{ color: COLORS.textPrimary }}>
+                        {currentUser?.email || 'lahirut85'}
+                      </p>
                     </div>
+
+                    <button 
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        setIsProfileModalOpen(true);
+                      }}
+                      className="w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg transition-colors hover:bg-white/10 flex items-center gap-2 cursor-pointer"
+                      style={{ color: COLORS.textPrimary }}
+                    >
+                      <User className="w-4 h-4 text-[#4FD1F5]" />
+                      Profile Settings
+                    </button>
 
                     <button 
                       onClick={handleLogout}
@@ -1433,7 +1470,16 @@ const Dashboard = () => {
         Star={Star}
       />
 
-
+      <ProfileModal
+        key={`${isProfileModalOpen}-${currentUser?.id || 'guest'}`}
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        COLORS={COLORS}
+        currentUser={currentUser}
+        userProfile={userProfile}
+        setUserProfile={setUserProfile}
+        defaultAvatar={userProfileImg}
+      />
     </div>
   );
 };
