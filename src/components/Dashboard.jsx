@@ -79,6 +79,7 @@ import { ExpensesView } from './views/ExpensesView';
 import { IncomeView } from './views/IncomeView';
 import { AccountsView } from './views/AccountsView';
 import { BudgetView } from './views/BudgetView';
+import { BillsView, DEFAULT_BILLS } from './views/BillsView';
 import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
@@ -292,16 +293,23 @@ const Dashboard = () => {
     return parsed?.plannedBudget || { income: 0, expenses: 0 };
   });
 
-  // Persist all custom bank lists and planning budget to settings sheet in cloud
+  const [bills, setBills] = useState(() => {
+    const cached = localStorage.getItem('budget_settings');
+    const parsed = cached ? JSON.parse(cached) : {};
+    return Array.isArray(parsed?.bills) && parsed.bills.length > 0 ? parsed.bills : DEFAULT_BILLS;
+  });
+
+  // Persist all custom bank lists, planning budget, and bills to settings sheet in cloud
   useEffect(() => {
     if (!isDataLoaded) return;
     syncSettings({
       customBanks,
       customAccountTypes,
       customBranches,
-      plannedBudget
+      plannedBudget,
+      bills
     });
-  }, [customBanks, customAccountTypes, customBranches, plannedBudget, isDataLoaded]);
+  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, isDataLoaded]);
 
 
 
@@ -403,6 +411,9 @@ const Dashboard = () => {
             expenses: parseFloat(settingsData.plannedBudget.expenses) || 0,
             categories: Array.isArray(settingsData.plannedBudget.categories) ? settingsData.plannedBudget.categories : undefined,
           });
+        }
+        if (Array.isArray(settingsData.bills) && settingsData.bills.length > 0) {
+          setBills(settingsData.bills);
         }
       }
       setIsDataLoaded(true);
@@ -1017,6 +1028,20 @@ const Dashboard = () => {
               currencies={currencies}
               handleEditBankAccount={handleEditBankAccount}
               handleDeleteBankAccount={handleDeleteBankAccount}
+            />
+          ) : activeMenu === 'Bills' ? (
+            <BillsView
+              COLORS={COLORS}
+              bills={bills}
+              setBills={setBills}
+              currencies={currencies}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              years={years}
+              ALL_MONTHS={ALL_MONTHS}
+              computedBankAccounts={computedBankAccounts}
             />
           ) : activeMenu === 'Budget' ? (
             <BudgetView
