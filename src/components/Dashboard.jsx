@@ -401,6 +401,7 @@ const Dashboard = () => {
           setPlannedBudget({
             income: parseFloat(settingsData.plannedBudget.income) || 0,
             expenses: parseFloat(settingsData.plannedBudget.expenses) || 0,
+            categories: Array.isArray(settingsData.plannedBudget.categories) ? settingsData.plannedBudget.categories : undefined,
           });
         }
       }
@@ -1027,6 +1028,7 @@ const Dashboard = () => {
               selectedYear={selectedYear}
               dashboardFilteredIncomes={dashboardFilteredIncomes}
               dashboardFilteredExpenses={dashboardFilteredExpenses}
+              computedBankAccounts={computedBankAccounts}
             />
           ) : (
             <div className="max-w-7xl mx-auto text-left">
