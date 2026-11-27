@@ -1050,7 +1050,11 @@ const Dashboard = () => {
               setPlannedBudget={setPlannedBudget}
               currencies={currencies}
               selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
               selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              years={years}
+              ALL_MONTHS={ALL_MONTHS}
               dashboardFilteredIncomes={dashboardFilteredIncomes}
               dashboardFilteredExpenses={dashboardFilteredExpenses}
               computedBankAccounts={computedBankAccounts}

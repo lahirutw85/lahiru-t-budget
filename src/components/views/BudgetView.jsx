@@ -1,84 +1,57 @@
 import { useState, useMemo } from 'react';
-import { Folder, TrendingUp, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Folder, TrendingUp, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import { formatCurrency } from '../../utils/currencyUtils';
+import {
+  normalizeBudgetCategories,
+  resolveItemAmountForPeriod,
+  resolveCategoryTotalForPeriod,
+  formatPeriodLabel,
+} from '../../utils/budgetUtils';
 
-const makeSub = (id, name, amount = 0, bankAccount = '') => ({
+const makeSub = (id, name) => ({
   id,
   name,
-  amount,
-  bankAccount,
+  defaultAmount: 0,
+  monthlyOverrides: {},
+  forwardChanges: {},
+  bankAccount: '',
+  startPeriod: '',
+  endPeriod: '',
 });
 
-export const DEFAULT_BUDGET_CATEGORIES = [
-  { id: 'cat-food', name: 'Food', amount: 0, bankAccount: '', subCategories: [] },
-  { id: 'cat-ai', name: 'AI', amount: 0, bankAccount: '', subCategories: [] },
-  {
-    id: 'cat-transportation',
-    name: 'Transportation',
-    amount: 0,
-    bankAccount: '',
-    subCategories: [
-      makeSub('sub-bus', 'Bus'),
-      makeSub('sub-taxi', 'Taxi'),
-      makeSub('sub-car', 'Car'),
-    ],
-  },
-  {
-    id: 'cat-shopping',
-    name: 'Shopping',
-    amount: 0,
-    bankAccount: '',
-    subCategories: [
-      makeSub('sub-appliances', 'Appliances'),
-      makeSub('sub-furniture', 'Furniture'),
-      makeSub('sub-kitchen', 'Kitchen'),
-      makeSub('sub-toiletries', 'Toiletries'),
-      makeSub('sub-cloth', 'Cloth'),
-    ],
-  },
-  { id: 'cat-emergency-fund', name: 'Emergency Fund', amount: 0, bankAccount: '', subCategories: [] },
-  {
-    id: 'cat-give',
-    name: 'Give',
-    amount: 0,
-    bankAccount: '',
-    subCategories: [
-      makeSub('sub-tithe', 'Tithe'),
-      makeSub('sub-donation', 'Donation'),
-      makeSub('sub-family', 'Family'),
-      makeSub('sub-naomi', 'Naomi'),
-    ],
-  },
-  { id: 'cat-mobile', name: 'Mobile', amount: 0, bankAccount: '', subCategories: [] },
-  { id: 'cat-investment', name: 'Investment', amount: 0, bankAccount: '', subCategories: [] },
-  {
-    id: 'cat-loan',
-    name: 'Loan',
-    amount: 0,
-    bankAccount: '',
-    subCategories: [
-      makeSub('sub-dib-loan', 'DIB Loan'),
-      makeSub('sub-endb-card', 'ENDB CARD'),
-      makeSub('sub-dib-card', 'DIB CARD'),
-    ],
-  },
-  { id: 'cat-house-rent', name: 'House Rent', amount: 0, bankAccount: '', subCategories: [] },
-];
+/**
+ * Apply an amount change to an item (category or sub-category) using either:
+ *  - 'single': only for `periodKey`
+ *  - 'forward': starting at `periodKey` and continuing every month forward
+ */
+const applyItemAmountUpdate = (item, periodKey, numericAmount, applyMode) => {
+  const nextOverrides = { ...(item.monthlyOverrides || {}) };
+  const nextForward = { ...(item.forwardChanges || {}) };
 
-const getCategoryTotal = (cat) => {
-  if (Array.isArray(cat.subCategories) && cat.subCategories.length > 0) {
-    return cat.subCategories.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+  if (applyMode === 'single') {
+    nextOverrides[periodKey] = numericAmount;
+  } else {
+    // Remove single-month override for this month so forward change takes effect cleanly
+    delete nextOverrides[periodKey];
+    nextForward[periodKey] = numericAmount;
   }
-  return parseFloat(cat.amount) || 0;
+
+  return {
+    ...item,
+    monthlyOverrides: nextOverrides,
+    forwardChanges: nextForward,
+  };
 };
 
 /**
  * BudgetView
  * ──────────────────────────────────────────────────────────
- * Lets the user configure planned monthly budget categories
- * and sub-categories (with amount + bank account).
+ * Monthly planning budget with categories & sub-categories.
+ * - Amounts continue every month forward until changed for a single month
+ *   or changed from a future month forward.
+ * - Supports Start Month/Year & End Month/Year (e.g. for Loan items).
  * - Single-click a category with sub-categories to expand/collapse.
- * - Double-click any category or sub-category row to edit it.
+ * - Double-click any category or sub-category row to edit.
  */
 export const BudgetView = ({
   COLORS,
@@ -86,7 +59,11 @@ export const BudgetView = ({
   setPlannedBudget,
   currencies,
   selectedMonth,
+  setSelectedMonth,
   selectedYear,
+  setSelectedYear,
+  years = [],
+  ALL_MONTHS = [],
   dashboardFilteredIncomes,
   dashboardFilteredExpenses,
   computedBankAccounts = [],
@@ -97,28 +74,16 @@ export const BudgetView = ({
     || { code: 'AED', symbol: 'AED' };
   const currencyCode = defaultCurrencyObj.code;
 
-  const categories = useMemo(() => {
-    const raw = Array.isArray(plannedBudget?.categories) && plannedBudget.categories.length > 0
-      ? plannedBudget.categories
-      : DEFAULT_BUDGET_CATEGORIES;
+  const activeMonth = selectedMonth === 'Full Year'
+    ? ALL_MONTHS[new Date().getMonth()]
+    : selectedMonth;
+  const monthIndex = ALL_MONTHS.indexOf(activeMonth);
+  const periodKey = `${selectedYear}-${String((monthIndex >= 0 ? monthIndex : new Date().getMonth()) + 1).padStart(2, '0')}`;
 
-    // Normalize legacy entries that had `details` string instead of `subCategories`
-    return raw.map(cat => {
-      if (Array.isArray(cat.subCategories)) return cat;
-      const defaultMatch = DEFAULT_BUDGET_CATEGORIES.find(d => d.id === cat.id || d.name === cat.name);
-      if (defaultMatch && defaultMatch.subCategories.length > 0) {
-        return { ...cat, subCategories: defaultMatch.subCategories };
-      }
-      if (cat.details && cat.details.trim()) {
-        const parts = cat.details.trim().split(/\s+/);
-        return {
-          ...cat,
-          subCategories: parts.map((p, idx) => makeSub(`${cat.id}-sub-${idx}`, p)),
-        };
-      }
-      return { ...cat, subCategories: [] };
-    });
-  }, [plannedBudget]);
+  const categories = useMemo(
+    () => normalizeBudgetCategories(plannedBudget?.categories),
+    [plannedBudget]
+  );
 
   // Build flat list of bank account options from existing computedBankAccounts
   const bankAccountOptions = useMemo(() => {
@@ -141,7 +106,6 @@ export const BudgetView = ({
     return options;
   }, [computedBankAccounts]);
 
-  // Expanded categories map
   const [expandedCatIds, setExpandedCatIds] = useState({});
 
   // Modal state for adding/editing a category
@@ -150,23 +114,35 @@ export const BudgetView = ({
   const [catName, setCatName] = useState('');
   const [catAmount, setCatAmount] = useState('0');
   const [catBankAccount, setCatBankAccount] = useState('');
+  const [catApplyMode, setCatApplyMode] = useState('forward'); // 'forward' | 'single'
+  const [catStartPeriod, setCatStartPeriod] = useState('');
+  const [catEndPeriod, setCatEndPeriod] = useState('');
   const [catSubList, setCatSubList] = useState([]);
   const [newSubInput, setNewSubInput] = useState('');
 
   // Modal state for editing a sub-category (on double-click)
-  const [editingSubTarget, setEditingSubTarget] = useState(null); // { catId, subId }
+  const [editingSubTarget, setEditingSubTarget] = useState(null); // { catId, subId, isLoan }
   const [subName, setSubName] = useState('');
   const [subAmount, setSubAmount] = useState('0');
   const [subBankAccount, setSubBankAccount] = useState('');
+  const [subApplyMode, setSubApplyMode] = useState('forward');
+  const [subStartPeriod, setSubStartPeriod] = useState('');
+  const [subEndPeriod, setSubEndPeriod] = useState('');
 
-  const totalCategoryBudget = categories.reduce((sum, c) => sum + getCategoryTotal(c), 0);
+  const totalCategoryBudget = categories.reduce(
+    (sum, c) => sum + resolveCategoryTotalForPeriod(c, periodKey),
+    0
+  );
 
   const actualIncome = dashboardFilteredIncomes.totalInCurrency(currencyCode);
   const actualExpenses = dashboardFilteredExpenses.totalInCurrency(currencyCode);
   const actualNet = actualIncome - actualExpenses;
 
   const persistCategories = (updatedCategories) => {
-    const newExpensesTotal = updatedCategories.reduce((sum, c) => sum + getCategoryTotal(c), 0);
+    const newExpensesTotal = updatedCategories.reduce(
+      (sum, c) => sum + resolveCategoryTotalForPeriod(c, periodKey),
+      0
+    );
     setPlannedBudget({
       ...plannedBudget,
       expenses: newExpensesTotal,
@@ -183,16 +159,23 @@ export const BudgetView = ({
     setCatName('');
     setCatAmount('0');
     setCatBankAccount('');
+    setCatApplyMode('forward');
+    setCatStartPeriod('');
+    setCatEndPeriod('');
     setCatSubList([]);
     setNewSubInput('');
     setIsCatModalOpen(true);
   };
 
   const openEditCategoryModal = (cat) => {
+    const hasOverride = cat.monthlyOverrides && Object.prototype.hasOwnProperty.call(cat.monthlyOverrides, periodKey);
     setEditingCatId(cat.id);
     setCatName(cat.name || '');
-    setCatAmount(String(cat.amount ?? 0));
+    setCatAmount(String(resolveItemAmountForPeriod(cat, periodKey)));
     setCatBankAccount(cat.bankAccount || '');
+    setCatApplyMode(hasOverride ? 'single' : 'forward');
+    setCatStartPeriod(cat.startPeriod || '');
+    setCatEndPeriod(cat.endPeriod || '');
     setCatSubList(Array.isArray(cat.subCategories) ? [...cat.subCategories] : []);
     setNewSubInput('');
     setIsCatModalOpen(true);
@@ -227,29 +210,36 @@ export const BudgetView = ({
 
     let updatedCategories;
     if (editingCatId) {
-      updatedCategories = categories.map(c =>
-        c.id === editingCatId
-          ? {
-              ...c,
-              name: trimmedName,
-              amount: finalSubList.length > 0 ? 0 : numericAmount,
-              bankAccount: finalSubList.length > 0 ? '' : catBankAccount,
-              subCategories: finalSubList,
-            }
-          : c
-      );
+      updatedCategories = categories.map(c => {
+        if (c.id !== editingCatId) return c;
+        const baseUpdated = {
+          ...c,
+          name: trimmedName,
+          bankAccount: finalSubList.length > 0 ? '' : catBankAccount,
+          startPeriod: catStartPeriod,
+          endPeriod: catEndPeriod,
+          subCategories: finalSubList,
+        };
+        if (finalSubList.length > 0) return baseUpdated;
+        return applyItemAmountUpdate(baseUpdated, periodKey, numericAmount, catApplyMode);
+      });
     } else {
       const newId = `cat-${Date.now()}`;
-      updatedCategories = [
-        ...categories,
-        {
-          id: newId,
-          name: trimmedName,
-          amount: finalSubList.length > 0 ? 0 : numericAmount,
-          bankAccount: finalSubList.length > 0 ? '' : catBankAccount,
-          subCategories: finalSubList,
-        },
-      ];
+      let newCat = {
+        id: newId,
+        name: trimmedName,
+        defaultAmount: 0,
+        monthlyOverrides: {},
+        forwardChanges: {},
+        bankAccount: finalSubList.length > 0 ? '' : catBankAccount,
+        startPeriod: catStartPeriod,
+        endPeriod: catEndPeriod,
+        subCategories: finalSubList,
+      };
+      if (finalSubList.length === 0 && numericAmount > 0) {
+        newCat = applyItemAmountUpdate(newCat, periodKey, numericAmount, catApplyMode);
+      }
+      updatedCategories = [...categories, newCat];
       if (finalSubList.length > 0) {
         setExpandedCatIds(prev => ({ ...prev, [newId]: true }));
       }
@@ -260,16 +250,20 @@ export const BudgetView = ({
   };
 
   const handleDeleteCategory = (id) => {
-    const updatedCategories = categories.filter(c => c.id !== id);
-    persistCategories(updatedCategories);
+    persistCategories(categories.filter(c => c.id !== id));
     setIsCatModalOpen(false);
   };
 
-  const openEditSubModal = (catId, sub) => {
-    setEditingSubTarget({ catId, subId: sub.id });
+  const openEditSubModal = (cat, sub) => {
+    const hasOverride = sub.monthlyOverrides && Object.prototype.hasOwnProperty.call(sub.monthlyOverrides, periodKey);
+    const isLoan = cat.name?.toLowerCase().includes('loan');
+    setEditingSubTarget({ catId: cat.id, subId: sub.id, isLoan });
     setSubName(sub.name || '');
-    setSubAmount(String(sub.amount ?? 0));
+    setSubAmount(String(resolveItemAmountForPeriod(sub, periodKey)));
     setSubBankAccount(sub.bankAccount || '');
+    setSubApplyMode(hasOverride ? 'single' : 'forward');
+    setSubStartPeriod(sub.startPeriod || '');
+    setSubEndPeriod(sub.endPeriod || '');
   };
 
   const handleSaveSubCategory = (e) => {
@@ -285,11 +279,17 @@ export const BudgetView = ({
       if (c.id !== editingSubTarget.catId) return c;
       return {
         ...c,
-        subCategories: (c.subCategories || []).map(s =>
-          s.id === editingSubTarget.subId
-            ? { ...s, name: trimmed, amount: numericAmount, bankAccount: subBankAccount }
-            : s
-        ),
+        subCategories: (c.subCategories || []).map(s => {
+          if (s.id !== editingSubTarget.subId) return s;
+          const updatedSub = {
+            ...s,
+            name: trimmed,
+            bankAccount: subBankAccount,
+            startPeriod: subStartPeriod,
+            endPeriod: subEndPeriod,
+          };
+          return applyItemAmountUpdate(updatedSub, periodKey, numericAmount, subApplyMode);
+        }),
       };
     });
     persistCategories(updatedCategories);
@@ -311,16 +311,57 @@ export const BudgetView = ({
 
   return (
     <div className="max-w-[1000px] mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
+      {/* Header & Month/Year Selector */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3" style={{ color: COLORS.textPrimary }}>
             <Folder className="w-7 h-7" style={{ color: COLORS.orange }} />
             Planning Budget
           </h1>
           <p className="text-sm mt-1" style={{ color: COLORS.textSecondary }}>
-            Set your planned monthly category allocations in <span style={{ color: COLORS.textPrimary }}>{currencyCode}</span>.
+            Monthly plan for <span style={{ color: COLORS.textPrimary }}>{activeMonth} {selectedYear}</span> in <span style={{ color: COLORS.textPrimary }}>{currencyCode}</span>.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center px-4 py-2 rounded-lg border text-sm" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgCard }}>
+            <Calendar className="w-4 h-4 mr-2" style={{ color: COLORS.skyBlue }} />
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="bg-transparent border-none outline-none font-medium appearance-none pr-4 cursor-pointer"
+              style={{ color: COLORS.textPrimary }}
+            >
+              {years.map(y => (
+                <option key={y} value={y} style={{ backgroundColor: COLORS.bgCard }}>{y}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 -ml-4 pointer-events-none" style={{ color: COLORS.textSecondary }} />
+          </div>
+
+          <div className="flex items-center px-4 py-2 rounded-lg border text-sm" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgCard }}>
+            <select
+              value={activeMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent border-none outline-none font-medium appearance-none pr-4 cursor-pointer"
+              style={{ color: COLORS.textPrimary }}
+            >
+              {ALL_MONTHS.map(m => (
+                <option key={m} value={m} style={{ backgroundColor: COLORS.bgCard }}>{m}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 -ml-4 pointer-events-none" style={{ color: COLORS.textSecondary }} />
+          </div>
+
+          <button
+            type="button"
+            onClick={openNewCategoryModal}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-opacity hover:opacity-90 ml-1 cursor-pointer"
+            style={{ backgroundColor: COLORS.orange, color: '#0B0F19' }}
+          >
+            <Plus className="w-4 h-4" />
+            Create New Category
+          </button>
         </div>
       </div>
 
@@ -329,27 +370,16 @@ export const BudgetView = ({
         className="p-6 rounded-2xl border"
         style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <div>
-            <h2 className="text-lg font-bold" style={{ color: COLORS.textPrimary }}>
-              Budget Categories
-            </h2>
-            <p className="text-xs mt-0.5" style={{ color: COLORS.textSecondary }}>
-              Click a category to expand sub-categories. Double-click any item to edit amount &amp; bank account. Total:{' '}
-              <span className="font-bold" style={{ color: COLORS.textPrimary }}>
-                {formatCurrency(totalCategoryBudget, currencyCode, currencies)}
-              </span>
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openNewCategoryModal}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-opacity hover:opacity-90 cursor-pointer shrink-0"
-            style={{ backgroundColor: COLORS.orange, color: '#0B0F19' }}
-          >
-            <Plus className="w-4 h-4" />
-            Create New Category
-          </button>
+        <div className="mb-4">
+          <h2 className="text-lg font-bold" style={{ color: COLORS.textPrimary }}>
+            Budget Categories
+          </h2>
+          <p className="text-xs mt-0.5" style={{ color: COLORS.textSecondary }}>
+            Amounts carry forward every month unless changed for one month or from a future month onwards. Total for {activeMonth} {selectedYear}:{' '}
+            <span className="font-bold" style={{ color: COLORS.textPrimary }}>
+              {formatCurrency(totalCategoryBudget, currencyCode, currencies)}
+            </span>
+          </p>
         </div>
 
         <div className="divide-y" style={{ borderColor: COLORS.border }}>
@@ -357,7 +387,8 @@ export const BudgetView = ({
             const subs = Array.isArray(cat.subCategories) ? cat.subCategories : [];
             const hasSubs = subs.length > 0;
             const isExpanded = !!expandedCatIds[cat.id];
-            const catTotal = getCategoryTotal(cat);
+            const catTotal = resolveCategoryTotalForPeriod(cat, periodKey);
+            const hasRange = !!(cat.startPeriod || cat.endPeriod);
 
             return (
               <div key={cat.id}>
@@ -379,8 +410,18 @@ export const BudgetView = ({
                       <span className="w-4 shrink-0" />
                     )}
                     <div className="min-w-0">
-                      <div className="font-semibold text-base" style={{ color: COLORS.textPrimary }}>
-                        {cat.name}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-base" style={{ color: COLORS.textPrimary }}>
+                          {cat.name}
+                        </span>
+                        {hasRange && (
+                          <span
+                            className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider"
+                            style={{ backgroundColor: 'rgba(56, 189, 248, 0.12)', color: COLORS.skyBlue }}
+                          >
+                            {cat.startPeriod ? formatPeriodLabel(cat.startPeriod) : 'Start'} → {cat.endPeriod ? formatPeriodLabel(cat.endPeriod) : 'Ongoing'}
+                          </span>
+                        )}
                       </div>
                       {hasSubs && (
                         <div className="text-xs mt-0.5 truncate" style={{ color: COLORS.textSecondary }}>
@@ -413,33 +454,47 @@ export const BudgetView = ({
                       </span>
                     </div>
 
-                    {subs.map((sub) => (
-                      <div
-                        key={sub.id}
-                        onClick={(e) => e.stopPropagation()}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          openEditSubModal(cat.id, sub);
-                        }}
-                        title="Double-click to edit sub-category"
-                        className="py-2.5 pl-10 pr-3 flex items-center justify-between gap-4 cursor-pointer transition-colors hover:bg-white/5 select-none"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium" style={{ color: COLORS.textPrimary }}>
-                            {sub.name}
-                          </div>
-                          {sub.bankAccount && (
-                            <div className="flex items-center gap-1.5 text-[11px] mt-0.5 font-medium" style={{ color: COLORS.skyBlue }}>
-                              <Landmark className="w-3 h-3 shrink-0" />
-                              <span className="truncate">{sub.bankAccount}</span>
+                    {subs.map((sub) => {
+                      const subVal = resolveItemAmountForPeriod(sub, periodKey);
+                      const subHasRange = !!(sub.startPeriod || sub.endPeriod);
+                      return (
+                        <div
+                          key={sub.id}
+                          onClick={(e) => e.stopPropagation()}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            openEditSubModal(cat, sub);
+                          }}
+                          title="Double-click to edit sub-category"
+                          className="py-2.5 pl-10 pr-3 flex items-center justify-between gap-4 cursor-pointer transition-colors hover:bg-white/5 select-none"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium" style={{ color: COLORS.textPrimary }}>
+                                {sub.name}
+                              </span>
+                              {subHasRange && (
+                                <span
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider"
+                                  style={{ backgroundColor: 'rgba(56, 189, 248, 0.12)', color: COLORS.skyBlue }}
+                                >
+                                  {sub.startPeriod ? formatPeriodLabel(sub.startPeriod) : 'Start'} → {sub.endPeriod ? formatPeriodLabel(sub.endPeriod) : 'Ongoing'}
+                                </span>
+                              )}
                             </div>
-                          )}
+                            {sub.bankAccount && (
+                              <div className="flex items-center gap-1.5 text-[11px] mt-0.5 font-medium" style={{ color: COLORS.skyBlue }}>
+                                <Landmark className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{sub.bankAccount}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0 text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
+                            {formatCurrency(subVal, currencyCode, currencies)}
+                          </div>
                         </div>
-                        <div className="text-right shrink-0 text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
-                          {formatCurrency(parseFloat(sub.amount) || 0, currencyCode, currencies)}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -455,7 +510,7 @@ export const BudgetView = ({
       >
         <h2 className="text-base font-bold flex items-center gap-2 mb-4" style={{ color: COLORS.textPrimary }}>
           <TrendingUp className="w-4 h-4" style={{ color: COLORS.skyBlue }} />
-          Current Period Snapshot ({selectedMonth} {selectedYear})
+          Current Period Snapshot ({activeMonth} {selectedYear})
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
           <div className="p-4 rounded-xl border" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgMain }}>
@@ -500,7 +555,7 @@ export const BudgetView = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveCategory} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleSaveCategory} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
                   Category Name
@@ -510,7 +565,7 @@ export const BudgetView = ({
                   required
                   value={catName}
                   onChange={(e) => setCatName(e.target.value)}
-                  placeholder="e.g. Food, House Rent"
+                  placeholder="e.g. Food, House Rent, Loan"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
                   style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
                 />
@@ -569,6 +624,34 @@ export const BudgetView = ({
                 )}
               </div>
 
+              {/* Start & End Month/Year (for Loan or any time-bound category) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Start Month &amp; Year
+                  </label>
+                  <input
+                    type="month"
+                    value={catStartPeriod}
+                    onChange={(e) => setCatStartPeriod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    End Month &amp; Year
+                  </label>
+                  <input
+                    type="month"
+                    value={catEndPeriod}
+                    onChange={(e) => setCatEndPeriod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  />
+                </div>
+              </div>
+
               {catSubList.length === 0 ? (
                 <>
                   <div>
@@ -585,6 +668,21 @@ export const BudgetView = ({
                       className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
                       style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                      Apply Change
+                    </label>
+                    <select
+                      value={catApplyMode}
+                      onChange={(e) => setCatApplyMode(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                      style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                    >
+                      <option value="forward">From {activeMonth} {selectedYear} onwards (every month)</option>
+                      <option value="single">Only for {activeMonth} {selectedYear}</option>
+                    </select>
                   </div>
 
                   <div>
@@ -607,7 +705,7 @@ export const BudgetView = ({
                 </>
               ) : (
                 <p className="text-xs p-3 rounded-xl border" style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textSecondary }}>
-                  Double-click each sub-category in the list after saving to set its individual amount and bank account.
+                  Double-click each sub-category in the list to set its amount, start/end month, and bank account.
                 </p>
               )}
 
@@ -699,6 +797,48 @@ export const BudgetView = ({
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
                   style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                  Apply Change
+                </label>
+                <select
+                  value={subApplyMode}
+                  onChange={(e) => setSubApplyMode(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                  style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                >
+                  <option value="forward">From {activeMonth} {selectedYear} onwards (every month)</option>
+                  <option value="single">Only for {activeMonth} {selectedYear}</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Start Month &amp; Year
+                  </label>
+                  <input
+                    type="month"
+                    value={subStartPeriod}
+                    onChange={(e) => setSubStartPeriod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    End Month &amp; Year
+                  </label>
+                  <input
+                    type="month"
+                    value={subEndPeriod}
+                    onChange={(e) => setSubEndPeriod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  />
+                </div>
               </div>
 
               <div>

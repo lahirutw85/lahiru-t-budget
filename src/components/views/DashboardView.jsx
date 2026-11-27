@@ -6,6 +6,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { convertCurrency, formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
 import { buildDonutData } from '../../utils/chartUtils';
+import { resolveExpensesBudgetForSelection } from '../../utils/budgetUtils';
 
 export const DashboardView = ({
   COLORS,
@@ -595,7 +596,7 @@ export const DashboardView = ({
             {(() => {
               const multiplier = selectedMonth === 'Full Year' ? 12 : 1;
               const budgetIncome = (parseFloat(plannedBudget?.income) || 0) * multiplier;
-              const budgetExpenses = (parseFloat(plannedBudget?.expenses) || 0) * multiplier;
+              const budgetExpenses = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS);
               const budgetNet = budgetIncome - budgetExpenses;
               const actualNet = totalIncomeValue - totalExpenditure;
 
