@@ -313,7 +313,48 @@ const Dashboard = () => {
     return Array.isArray(parsed?.recurringIncomes) ? parsed.recurringIncomes : [];
   });
 
-  // Persist all custom bank lists, planning budget, bills, and recurring incomes to settings sheet in cloud
+  const hydrateIncomeCategories = (rawList) => {
+    if (!Array.isArray(rawList) || rawList.length === 0) return INCOME_CATEGORIES;
+    return rawList.map(cat => {
+      const defaultCat = INCOME_CATEGORIES.find(c => c.id === cat.id || c.name.toLowerCase() === cat.name?.toLowerCase());
+      const matchedIcon = AVAILABLE_ICONS.find(i => i.name === cat.iconName)?.icon;
+      const parentIcon = matchedIcon || defaultCat?.icon || Wallet;
+      const rawSubs = Array.isArray(cat.subCategories) ? cat.subCategories : [];
+      return {
+        id: cat.id || Date.now().toString(),
+        name: cat.name || 'Other',
+        icon: parentIcon,
+        subCategories: rawSubs.map(sub => {
+          const defaultSub = defaultCat?.subCategories?.find(s => s.id === sub.id || s.name.toLowerCase() === sub.name?.toLowerCase());
+          const subIcon = AVAILABLE_ICONS.find(i => i.name === sub.iconName)?.icon;
+          return {
+            id: sub.id || Date.now().toString(),
+            name: sub.name || 'General',
+            icon: subIcon || defaultSub?.icon || parentIcon,
+          };
+        }),
+      };
+    });
+  };
+
+  const serializeIncomeCategories = (list) =>
+    (list || []).map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      iconName: AVAILABLE_ICONS.find(i => i.icon === cat.icon)?.name || '',
+      subCategories: (cat.subCategories || []).map(sub => ({
+        id: sub.id,
+        name: sub.name,
+        iconName: AVAILABLE_ICONS.find(i => i.icon === sub.icon)?.name || '',
+      })),
+    }));
+
+  const [incomeCategories, setIncomeCategories] = useState(() => {
+    const parsed = safeJsonParse(localStorage.getItem('budget_settings'), {});
+    return hydrateIncomeCategories(parsed?.incomeCategories);
+  });
+
+  // Persist all custom bank lists, planning budget, bills, recurring incomes, and income categories to settings in cloud
   useEffect(() => {
     if (!isDataLoaded) return;
     syncSettings({
@@ -322,13 +363,15 @@ const Dashboard = () => {
       customBranches,
       plannedBudget,
       bills,
-      recurringIncomes
+      recurringIncomes,
+      incomeCategories: serializeIncomeCategories(incomeCategories),
     });
-  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, recurringIncomes, isDataLoaded]);
+  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, recurringIncomes, incomeCategories, isDataLoaded]);
 
 
 
-  // Category manager state — for the modal that lets users add/edit/delete categories
+  // Category manager state — for the modal that lets users add/edit/delete categories (expense or income)
+  const [categoryManagerTarget,   setCategoryManagerTarget]   = useState('expense');
   const [isCategoriesManagerOpen, setIsCategoriesManagerOpen] = useState(false);
   const [isAddCategoryOpen,       setIsAddCategoryOpen]       = useState(false);
   const [newCategoryName,         setNewCategoryName]         = useState('');
@@ -394,7 +437,7 @@ const Dashboard = () => {
   const getIconForCategory = (catName) => {
     const foundExpense = categories.find(c => c.name.toLowerCase() === catName?.toLowerCase());
     if (foundExpense) return foundExpense.icon;
-    const foundIncome = INCOME_CATEGORIES.find(c => c.name.toLowerCase() === catName?.toLowerCase());
+    const foundIncome = incomeCategories.find(c => c.name.toLowerCase() === catName?.toLowerCase());
     return foundIncome ? foundIncome.icon : Wallet;
   };
 
@@ -464,6 +507,9 @@ const Dashboard = () => {
         }
         if (Array.isArray(settingsData.recurringIncomes)) {
           setRecurringIncomes(settingsData.recurringIncomes);
+        }
+        if (Array.isArray(settingsData.incomeCategories) && settingsData.incomeCategories.length > 0) {
+          setIncomeCategories(hydrateIncomeCategories(settingsData.incomeCategories));
         }
       }
       setIsDataLoaded(true);
@@ -679,6 +725,14 @@ const Dashboard = () => {
     syncIncomesToDatabase(updatedIncomes);
   };
 
+  const managedCategories = categoryManagerTarget === 'income' ? incomeCategories : categories;
+  const setManagedCategories = categoryManagerTarget === 'income' ? setIncomeCategories : setCategories;
+
+  const handleOpenCategoriesManager = (target = 'expense') => {
+    setCategoryManagerTarget(target === 'income' ? 'income' : 'expense');
+    setIsCategoriesManagerOpen(true);
+  };
+
   const handleStartAddCategory = () => {
     setNewCategoryName('');
     setNewCategoryIcon(Star);
@@ -693,25 +747,25 @@ const Dashboard = () => {
 
     const name = newCategoryName.trim();
 
-    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+    if (managedCategories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
       alert('This category name already exists!');
       return;
     }
 
-    setCategories([
-      ...categories,
-      { id: Date.now().toString(), name, icon: newCategoryIcon }
+    setManagedCategories([
+      ...managedCategories,
+      { id: Date.now().toString(), name, icon: newCategoryIcon, subCategories: [] }
     ]);
 
     setIsAddCategoryOpen(false);
   };
 
   const handleDeleteCategory = (id) => {
-    const cat = categories.find(c => c.id === id);
+    const cat = managedCategories.find(c => c.id === id);
     if (cat) {
       const confirm = window.confirm(`Are you sure you want to delete the category "${cat.name}"?`);
       if (confirm) {
-        setCategories(categories.filter(c => c.id !== id));
+        setManagedCategories(managedCategories.filter(c => c.id !== id));
       }
     }
   };
@@ -731,36 +785,50 @@ const Dashboard = () => {
 
     const updatedName = editCategoryName.trim();
 
-    if (categories.some(c => c.id !== editingCategory.id && c.name.toLowerCase() === updatedName.toLowerCase())) {
+    if (managedCategories.some(c => c.id !== editingCategory.id && c.name.toLowerCase() === updatedName.toLowerCase())) {
       alert('This category name already exists!');
       return;
     }
 
-    setCategories(categories.map(c => c.id === editingCategory.id ? {
+    setManagedCategories(managedCategories.map(c => c.id === editingCategory.id ? {
       ...c,
       name: updatedName,
       icon: editCategoryIcon
     } : c));
 
-    const updatedList = expenses.map(exp => {
-      if (exp.category === editingCategory.name) {
-        return {
-          ...exp,
-          category: updatedName,
-          icon: editCategoryIcon
-        };
-      }
-      return exp;
-    });
+    if (categoryManagerTarget === 'income') {
+      const updatedList = incomes.map(inc => {
+        if (inc.category === editingCategory.name) {
+          return { ...inc, category: updatedName, icon: editCategoryIcon };
+        }
+        return inc;
+      });
+      setIncomes(updatedList);
+      syncIncomesToDatabase(updatedList);
+    } else {
+      const updatedList = expenses.map(exp => {
+        if (exp.category === editingCategory.name) {
+          return {
+            ...exp,
+            category: updatedName,
+            icon: editCategoryIcon
+          };
+        }
+        return exp;
+      });
 
-    setExpenses(updatedList);
-    syncExpensesToDatabase(updatedList);
+      setExpenses(updatedList);
+      syncExpensesToDatabase(updatedList);
+    }
 
     setIsEditCategoryOpen(false);
     setEditingCategory(null);
   };
 
-  const handleOpenSubCategoriesManager = (cat) => {
+  const handleOpenSubCategoriesManager = (cat, target) => {
+    if (target) {
+      setCategoryManagerTarget(target === 'income' ? 'income' : 'expense');
+    }
     setActiveParentCategory(cat);
     setIsSubCategoriesManagerOpen(true);
   };
@@ -768,9 +836,9 @@ const Dashboard = () => {
   const handleDeleteSubCategory = (subId) => {
     const confirm = window.confirm("Are you sure you want to delete this subcategory?");
     if (confirm) {
-      setCategories(categories.map(c => {
+      setManagedCategories(managedCategories.map(c => {
         if (c.id === activeParentCategory.id) {
-          const updatedSubs = c.subCategories.filter(s => s.id !== subId);
+          const updatedSubs = (c.subCategories || []).filter(s => s.id !== subId);
           setActiveParentCategory({ ...c, subCategories: updatedSubs });
           return { ...c, subCategories: updatedSubs };
         }
@@ -802,7 +870,7 @@ const Dashboard = () => {
       icon: newSubCategoryIcon
     };
 
-    setCategories(categories.map(c => {
+    setManagedCategories(managedCategories.map(c => {
       if (c.id === activeParentCategory.id) {
         const updatedSubs = [...(c.subCategories || []), newSubObj];
         setActiveParentCategory({ ...c, subCategories: updatedSubs });
@@ -832,9 +900,9 @@ const Dashboard = () => {
       return;
     }
 
-    setCategories(categories.map(c => {
+    setManagedCategories(managedCategories.map(c => {
       if (c.id === activeParentCategory.id) {
-        const updatedSubs = c.subCategories.map(s => s.id === editingSubCategory.id ? {
+        const updatedSubs = (c.subCategories || []).map(s => s.id === editingSubCategory.id ? {
           ...s,
           name: updatedName,
           icon: editSubCategoryIcon
@@ -845,18 +913,29 @@ const Dashboard = () => {
       return c;
     }));
 
-    const updatedList = expenses.map(exp => {
-      if (exp.category === activeParentCategory.name && exp.subCategory === editingSubCategory.name) {
-        return {
-          ...exp,
-          subCategory: updatedName
-        };
-      }
-      return exp;
-    });
+    if (categoryManagerTarget === 'income') {
+      const updatedList = incomes.map(inc => {
+        if (inc.category === activeParentCategory.name && inc.subCategory === editingSubCategory.name) {
+          return { ...inc, subCategory: updatedName };
+        }
+        return inc;
+      });
+      setIncomes(updatedList);
+      syncIncomesToDatabase(updatedList);
+    } else {
+      const updatedList = expenses.map(exp => {
+        if (exp.category === activeParentCategory.name && exp.subCategory === editingSubCategory.name) {
+          return {
+            ...exp,
+            subCategory: updatedName
+          };
+        }
+        return exp;
+      });
 
-    setExpenses(updatedList);
-    syncExpensesToDatabase(updatedList);
+      setExpenses(updatedList);
+      syncExpensesToDatabase(updatedList);
+    }
 
     setIsEditSubCategoryOpen(false);
     setEditingSubCategory(null);
@@ -1119,7 +1198,7 @@ const Dashboard = () => {
               activeCurrencies={activeCurrencies}
               currencies={currencies}
               categories={syncedExpenseCategories}
-              INCOME_CATEGORIES={INCOME_CATEGORIES}
+              INCOME_CATEGORIES={incomeCategories}
               isDarkMode={isDarkMode}
               plannedBudget={plannedBudget}
               bills={bills}
@@ -1166,7 +1245,7 @@ const Dashboard = () => {
               activeCurrencies={activeCurrencies}
               currencies={currencies}
               filteredIncomes={filteredIncomes}
-              INCOME_CATEGORIES={INCOME_CATEGORIES}
+              INCOME_CATEGORIES={incomeCategories}
               isDarkMode={isDarkMode}
               handleEditIncome={handleEditIncome}
               handleDeleteIncome={handleDeleteIncome}
@@ -1267,9 +1346,9 @@ const Dashboard = () => {
         formType={formType}
         editingTransaction={editingExpenseId ? (formType === 'income' ? incomes.find(i => i.id === editingExpenseId) : expenses.find(e => e.id === editingExpenseId)) : null}
         onSave={handleSaveExpense}
-        INCOME_CATEGORIES={INCOME_CATEGORIES}
+        INCOME_CATEGORIES={incomeCategories}
         categories={syncedExpenseCategories}
-        setIsCategoriesManagerOpen={setIsCategoriesManagerOpen}
+        setIsCategoriesManagerOpen={() => handleOpenCategoriesManager(formType)}
         handleOpenSubCategoriesManager={handleOpenSubCategoriesManager}
         currencies={currencies}
         setIsCurrencyManagerOpen={setIsCurrencyManagerOpen}
@@ -1305,8 +1384,8 @@ const Dashboard = () => {
       <CategoryManagerModal
         isCategoriesManagerOpen={isCategoriesManagerOpen}
         setIsCategoriesManagerOpen={setIsCategoriesManagerOpen}
-        categories={categories}
-        setCategories={setCategories}
+        categories={managedCategories}
+        setCategories={setManagedCategories}
         handleDeleteCategory={handleDeleteCategory}
         handleStartEditCategory={handleStartEditCategory}
         handleOpenSubCategoriesManager={handleOpenSubCategoriesManager}

@@ -197,15 +197,14 @@ export const TransactionModal = ({
                   <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
               </select>
-              {formType !== 'income' && (
-                <button 
-                  type="button"
-                  onClick={() => setIsCategoriesManagerOpen(true)}
-                  className="p-2 bg-gray-300 hover:bg-gray-400 rounded transition-colors text-gray-700"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              )}
+              <button 
+                type="button"
+                onClick={() => setIsCategoriesManagerOpen(true)}
+                className="p-2 bg-gray-300 hover:bg-gray-400 rounded transition-colors text-gray-700"
+                title="Manage Categories"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -218,24 +217,25 @@ export const TransactionModal = ({
                 onChange={(e) => setFormSubcategory(e.target.value)}
                 className="flex-1 bg-white border border-gray-300 rounded px-3 py-2 shadow-sm text-sm focus:outline-none text-gray-700"
               >
-                {currentCategoryObj?.subCategories?.map(sub => (
-                  <option key={sub.id} value={sub.name}>{sub.name}</option>
-                )) || <option value="General">General</option>}
+                {currentCategoryObj?.subCategories?.length > 0
+                  ? currentCategoryObj.subCategories.map(sub => (
+                      <option key={sub.id} value={sub.name}>{sub.name}</option>
+                    ))
+                  : <option value="General">General</option>}
               </select>
-              {formType !== 'income' && (
-                <button 
-                  type="button"
-                  onClick={() => {
-                    const catObj = categories.find(c => c.name === currentCategoryName);
-                    if (catObj) {
-                      handleOpenSubCategoriesManager(catObj);
-                    }
-                  }}
-                  className="p-2 bg-gray-300 hover:bg-gray-400 rounded transition-colors text-gray-700"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              )}
+              <button 
+                type="button"
+                onClick={() => {
+                  const catObj = activeCategories.find(c => c.name === currentCategoryName);
+                  if (catObj) {
+                    handleOpenSubCategoriesManager(catObj, formType);
+                  }
+                }}
+                className="p-2 bg-gray-300 hover:bg-gray-400 rounded transition-colors text-gray-700"
+                title="Manage Subcategories"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
