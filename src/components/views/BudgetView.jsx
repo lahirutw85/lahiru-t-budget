@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Folder, Plus, X, Landmark, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, CheckCircle2 } from 'lucide-react';
+import { Folder, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, getTodayDateString } from '../../utils/currencyUtils';
 import {
   normalizeBudgetCategories,
@@ -545,37 +545,9 @@ export const BudgetView = ({
                         {cat.paidMonths?.[periodKey] ? 'Paid' : 'Mark Paid'}
                       </button>
                     )}
-                    <div className="text-right font-bold text-base min-w-[95px]" style={{ color: COLORS.textPrimary }}>
+                    <div className="text-right font-bold text-base" style={{ color: COLORS.textPrimary }}>
                       {formatCurrency(catTotal, currencyCode, currencies)}
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditCategoryModal(cat);
-                      }}
-                      onDoubleClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                      style={{ color: COLORS.skyBlue }}
-                      title="Edit Category"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`Delete "${cat.name}" category?`)) {
-                          handleDeleteCategory(cat.id);
-                        }
-                      }}
-                      onDoubleClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
-                      style={{ color: COLORS.red }}
-                      title="Delete Category"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
 
@@ -655,43 +627,9 @@ export const BudgetView = ({
                                 {sub.paidMonths?.[periodKey] ? 'Paid' : 'Mark Paid'}
                               </button>
                             )}
-                            <div className="text-right text-sm font-semibold min-w-[85px]" style={{ color: COLORS.textPrimary }}>
+                            <div className="text-right text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
                               {formatCurrency(subVal, currencyCode, currencies)}
                             </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditSubModal(cat, sub);
-                              }}
-                              onDoubleClick={(e) => e.stopPropagation()}
-                              className="p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                              style={{ color: COLORS.skyBlue }}
-                              title="Edit Sub-category"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (window.confirm(`Delete "${sub.name}" sub-category?`)) {
-                                  persistCategories(
-                                    categories.map(c =>
-                                      c.id !== cat.id
-                                        ? c
-                                        : { ...c, subCategories: (c.subCategories || []).filter(s => s.id !== sub.id) }
-                                    )
-                                  );
-                                }
-                              }}
-                              onDoubleClick={(e) => e.stopPropagation()}
-                              className="p-1 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
-                              style={{ color: COLORS.red }}
-                              title="Delete Sub-category"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
                           </div>
                         </div>
                       );
