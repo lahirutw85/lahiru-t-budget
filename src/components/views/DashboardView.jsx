@@ -712,7 +712,7 @@ export const DashboardView = ({
               const multiplier = selectedMonth === 'Full Year' ? 12 : 1;
               const recurringIncomeBudget = resolveRecurringIncomeForSelection(recurringIncomes, selectedYear, selectedMonth, ALL_MONTHS);
               const budgetIncome = recurringIncomeBudget > 0 ? recurringIncomeBudget : ((parseFloat(plannedBudget?.income) || 0) * multiplier);
-              const budgetExpenses = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS);
+              const budgetExpenses = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS) + fullBillsAmount;
               const budgetNet = budgetIncome - budgetExpenses;
               const actualNet = totalIncomeValue - totalExpenditure;
 
