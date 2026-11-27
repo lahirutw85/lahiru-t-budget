@@ -20,22 +20,30 @@ export class TransactionCollection {
   }
 
   /**
-   * Returns a new TransactionCollection filtered by year and month.
+   * Returns a new TransactionCollection filtered by year, month, and optional day.
    * @param {string} year - The target year
    * @param {string} month - The target month name or 'Full Year'
    * @param {Array<string>} monthsList - The array of month names (to map index)
+   * @param {string} day - Day number string ('1'-'31') or 'Full Month'
    * @returns {TransactionCollection}
    */
-  filterByPeriod(year, month, monthsList) {
+  filterByPeriod(year, month, monthsList, day = 'Full Month') {
     const filtered = this.items.filter(tx => {
       if (!tx.date) return false;
       const parts = tx.date.split('-');
       if (parts.length !== 3) return false;
       const txYear = parts[0];
-      if (month === 'Full Year') return txYear === year;
-      const txMonthIndex = parseInt(parts[1], 10) - 1;
-      const txMonth = monthsList[txMonthIndex];
-      return txYear === year && txMonth === month;
+      if (txYear !== year) return false;
+      if (month !== 'Full Year') {
+        const txMonthIndex = parseInt(parts[1], 10) - 1;
+        const txMonth = monthsList[txMonthIndex];
+        if (txMonth !== month) return false;
+      }
+      if (day && day !== 'Full Month') {
+        const txDay = parseInt(parts[2], 10);
+        if (txDay !== parseInt(day, 10)) return false;
+      }
+      return true;
     });
     return new TransactionCollection(filtered);
   }

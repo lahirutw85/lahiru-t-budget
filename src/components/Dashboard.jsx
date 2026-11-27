@@ -171,10 +171,11 @@ const Dashboard = () => {
     setProfileDropdownOpen(false);
   };
 
-  // Date/Period selectors — used to filter expenses & incomes by month/year
+  // Date/Period selectors — used to filter expenses & incomes by month/year/day
   const [years,         setYears]         = useState([currentYearStr]);
   const [selectedYear,  setSelectedYear]  = useState(currentYearStr);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+  const [selectedDay,   setSelectedDay]   = useState('Full Month');
 
   // Expenses — raw list + which one is being edited (null = adding new)
   const [expenses,         setExpenses]         = useState([]);
@@ -418,11 +419,11 @@ const Dashboard = () => {
   // These collections re-compute whenever expenses/incomes or the selected
   // year/month change. All charts and tables read from these.
 
-  // Only expenses that match the currently selected year + month
-  const filteredExpenses = budgetService.expensesCollection.filterByPeriod(selectedYear, selectedMonth, ALL_MONTHS);
+  // Only expenses that match the currently selected year + month + day
+  const filteredExpenses = budgetService.expensesCollection.filterByPeriod(selectedYear, selectedMonth, ALL_MONTHS, selectedDay);
 
-  // Only incomes that match the currently selected year + month
-  const filteredIncomes = budgetService.incomesCollection.filterByPeriod(selectedYear, selectedMonth, ALL_MONTHS);
+  // Only incomes that match the currently selected year + month + day
+  const filteredIncomes = budgetService.incomesCollection.filterByPeriod(selectedYear, selectedMonth, ALL_MONTHS, selectedDay);
 
   // Calculate previous month's/year's stats for trend comparisons
   const currentMonthIdx = ALL_MONTHS.indexOf(selectedMonth);
@@ -747,9 +748,9 @@ const Dashboard = () => {
   const computedBankAccounts = budgetService.getComputedBankAccounts(todayStr);
   const bankBalancesSumByCurrency = budgetService.sumBalancesByCurrency(todayStr);
 
-  // Dashboard only counts transactions realized up to today (day-to-day)
-  const dashboardFilteredExpenses = filteredExpenses.filterUpToDate(todayStr);
-  const dashboardFilteredIncomes  = filteredIncomes.filterUpToDate(todayStr);
+  // Dashboard defaults to day-to-day cutoff when Full Month is selected, or filters to the specific selectedDay
+  const dashboardFilteredExpenses = selectedDay === 'Full Month' ? filteredExpenses.filterUpToDate(todayStr) : filteredExpenses;
+  const dashboardFilteredIncomes  = selectedDay === 'Full Month' ? filteredIncomes.filterUpToDate(todayStr) : filteredIncomes;
   const dashboardPrevExpenses     = prevExpenses.filterUpToDate(todayStr);
   const dashboardPrevIncomes      = prevIncomes.filterUpToDate(todayStr);
 
@@ -942,6 +943,8 @@ const Dashboard = () => {
               setSelectedMonth={setSelectedMonth}
               selectedYear={selectedYear}
               setSelectedYear={setSelectedYear}
+              selectedDay={selectedDay}
+              setSelectedDay={setSelectedDay}
               years={years}
               handleAddYear={handleAddYear}
               handleDeleteYear={handleDeleteYear}
@@ -967,6 +970,8 @@ const Dashboard = () => {
               setSelectedMonth={setSelectedMonth}
               selectedYear={selectedYear}
               setSelectedYear={setSelectedYear}
+              selectedDay={selectedDay}
+              setSelectedDay={setSelectedDay}
               years={years}
               ALL_MONTHS={ALL_MONTHS}
               setFormType={setFormType}
@@ -987,6 +992,8 @@ const Dashboard = () => {
               setSelectedMonth={setSelectedMonth}
               selectedYear={selectedYear}
               setSelectedYear={setSelectedYear}
+              selectedDay={selectedDay}
+              setSelectedDay={setSelectedDay}
               years={years}
               ALL_MONTHS={ALL_MONTHS}
               setFormType={setFormType}

@@ -13,6 +13,8 @@ export const DashboardView = ({
   setSelectedMonth,
   selectedYear,
   setSelectedYear,
+  selectedDay = 'Full Month',
+  setSelectedDay,
   years,
   handleAddYear,
   handleDeleteYear,
@@ -331,6 +333,12 @@ export const DashboardView = ({
     );
   };
 
+  const monthIdx = ALL_MONTHS.indexOf(selectedMonth);
+  const daysInMonth = monthIdx >= 0
+    ? new Date(parseInt(selectedYear, 10) || new Date().getFullYear(), monthIdx + 1, 0).getDate()
+    : 31;
+  const dayOptions = ['Full Month', ...Array.from({ length: daysInMonth }, (_, i) => String(i + 1))];
+
   return (
     <div className="max-w-[1400px] mx-auto space-y-6">
       
@@ -339,7 +347,7 @@ export const DashboardView = ({
         <div>
           <h1 className="text-3xl font-bold" style={{ color: COLORS.textPrimary }}>DashBoard</h1>
           <p className="text-sm mt-1" style={{ color: COLORS.textSecondary }}>
-            financial Details for <span style={{ color: COLORS.textPrimary }}>{selectedMonth} {selectedYear}</span>
+            financial Details for <span style={{ color: COLORS.textPrimary }}>{selectedMonth}{selectedDay !== 'Full Month' ? ` ${selectedDay},` : ''} {selectedYear}</span>
           </p>
         </div>
         
@@ -371,12 +379,18 @@ export const DashboardView = ({
             </select>
             <ChevronDown className="w-4 h-4 -ml-4 pointer-events-none" style={{ color: COLORS.textSecondary }}/>
           </div>
-          <div
-            className="flex items-center px-4 py-2 rounded-lg border text-sm font-medium"
-            style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgCard, color: COLORS.textPrimary }}
-            title="Current Day"
-          >
-            {new Date().getDate()}
+          <div className="flex items-center px-4 py-2 rounded-lg border text-sm" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgCard }}>
+            <select
+              value={selectedDay}
+              onChange={(e) => setSelectedDay(e.target.value)}
+              className="bg-transparent border-none outline-none font-medium appearance-none pr-4 cursor-pointer"
+              style={{ color: COLORS.textPrimary }}
+            >
+              {dayOptions.map(d => (
+                <option key={d} value={d} style={{ backgroundColor: COLORS.bgCard }}>{d}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 -ml-4 pointer-events-none" style={{ color: COLORS.textSecondary }}/>
           </div>
           <button 
             onClick={handleAddYear}
