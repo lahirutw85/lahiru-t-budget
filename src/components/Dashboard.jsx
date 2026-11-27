@@ -69,6 +69,10 @@ import {
   Menu,
   Presentation,
   User,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 
 // Modular Layouts, Views, and Modals
@@ -80,7 +84,13 @@ import { AccountsView } from './views/AccountsView';
 import { BudgetView } from './views/BudgetView';
 import { BillsView } from './views/BillsView';
 import { ReportsView } from './views/ReportsView';
-import { DEFAULT_BILLS, normalizeBudgetCategories } from '../utils/budgetUtils';
+import {
+  DEFAULT_BILLS,
+  normalizeBudgetCategories,
+  getBillAmountForPeriodKey,
+  resolveItemAmountForPeriod,
+  resolveCategoryTotalForPeriod,
+} from '../utils/budgetUtils';
 import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
@@ -96,7 +106,7 @@ import { THEMES } from '../constants/themes';
 import { ALL_CURRENCIES } from '../constants/currencies';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
 import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings, safeJsonParse } from '../utils/dataSync';
-import { getTodayDateString } from '../utils/currencyUtils';
+import { getTodayDateString, formatCurrency } from '../utils/currencyUtils';
 import { supabase, hasSupabase } from '../utils/supabaseClient';
 
 
@@ -168,6 +178,8 @@ const Dashboard = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [dismissedNotifications, setDismissedNotifications] = useState([]);
 
   useEffect(() => {
     if (!hasSupabase() || !supabase) return;
@@ -1086,6 +1098,122 @@ const Dashboard = () => {
     }
   };
 
+  const defaultCurrencyCode = defaultCurrencyObj.code;
+
+  // Live notifications: overdue/pending bills, pending budget payments, over-budget alerts, and income updates
+  const notifications = useMemo(() => {
+    const items = [];
+    const todayStr = getTodayDateString();
+    const [yearStr, monthStr, dayStr] = todayStr.split('-');
+    const currentPeriodKey = `${yearStr}-${monthStr}`;
+    const currentDayNum = parseInt(dayStr, 10) || 1;
+    const fmt = (amt, cur = defaultCurrencyCode) => formatCurrency(amt, cur, currencies);
+
+    // 1. Bills — overdue or pending payment this month
+    (bills || []).forEach(bill => {
+      if (bill.startPeriod && currentPeriodKey < bill.startPeriod) return;
+      const amount = getBillAmountForPeriodKey(bill, currentPeriodKey);
+      if (amount <= 0 || bill.paidMonths?.[currentPeriodKey]) return;
+      const dueDayNum = parseInt(bill.dueDay, 10);
+      const isOverdue = !Number.isNaN(dueDayNum) && dueDayNum > 0 && currentDayNum > dueDayNum;
+      items.push({
+        id: `bill-${bill.id}-${currentPeriodKey}`,
+        kind: isOverdue ? 'overdue' : 'pending',
+        title: isOverdue ? `Overdue Bill: ${bill.name}` : `Pending Bill: ${bill.name}`,
+        message: isOverdue
+          ? `${fmt(amount)} was due on day ${dueDayNum} — please review and pay.`
+          : `${fmt(amount)} pending payment this month${dueDayNum ? ` (due day ${dueDayNum})` : ''}.`,
+        targetMenu: 'Bills',
+      });
+    });
+
+    // 2. Planned Budget — unpaid scheduled items (e.g. Loans, Rent, etc.) & over-budget alerts
+    const monthExpenses = expenses.filter(e => e.date?.startsWith(currentPeriodKey));
+    const spentByCategory = monthExpenses.reduce((acc, e) => {
+      const key = (e.category || '').toLowerCase();
+      acc[key] = (acc[key] || 0) + (Number(e.amount) || 0);
+      return acc;
+    }, {});
+
+    normalizeBudgetCategories(plannedBudget?.categories).forEach(cat => {
+      const hasSubs = Array.isArray(cat.subCategories) && cat.subCategories.length > 0;
+      if (hasSubs) {
+        cat.subCategories.forEach(sub => {
+          if (sub.startPeriod && currentPeriodKey < sub.startPeriod) return;
+          if (sub.endPeriod && currentPeriodKey > sub.endPeriod) return;
+          const amt = resolveItemAmountForPeriod(sub, currentPeriodKey);
+          if (amt > 0 && !sub.paidMonths?.[currentPeriodKey] && !cat.paidMonths?.[currentPeriodKey]) {
+            items.push({
+              id: `budget-sub-${cat.id}-${sub.id}-${currentPeriodKey}`,
+              kind: 'pending',
+              title: `Pending Payment: ${cat.name} (${sub.name})`,
+              message: `${fmt(amt)} budgeted for ${currentPeriodKey} is still unpaid.`,
+              targetMenu: 'Budget',
+            });
+          }
+        });
+      } else {
+        if ((!cat.startPeriod || currentPeriodKey >= cat.startPeriod) && (!cat.endPeriod || currentPeriodKey <= cat.endPeriod)) {
+          const amt = resolveItemAmountForPeriod(cat, currentPeriodKey);
+          if (amt > 0 && !cat.paidMonths?.[currentPeriodKey]) {
+            items.push({
+              id: `budget-cat-${cat.id}-${currentPeriodKey}`,
+              kind: 'pending',
+              title: `Pending Budget: ${cat.name}`,
+              message: `${fmt(amt)} planned for ${currentPeriodKey} is not marked paid yet.`,
+              targetMenu: 'Budget',
+            });
+          }
+        }
+      }
+
+      const plannedTotal = resolveCategoryTotalForPeriod(cat, currentPeriodKey);
+      const actualTotal = spentByCategory[cat.name.toLowerCase()] || 0;
+      if (plannedTotal > 0 && actualTotal > plannedTotal) {
+        items.push({
+          id: `overbudget-${cat.id}-${currentPeriodKey}`,
+          kind: 'overdue',
+          title: `Over Budget: ${cat.name}`,
+          message: `Spent ${fmt(actualTotal)} of ${fmt(plannedTotal)} planned.`,
+          targetMenu: 'Budget',
+        });
+      }
+    });
+
+    // 3. Recurring Incomes — pending confirmation & confirmed income updates
+    (recurringIncomes || []).forEach(inc => {
+      if (inc.startPeriod && currentPeriodKey < inc.startPeriod) return;
+      const amt = Number(inc.amount) || 0;
+      if (amt <= 0) return;
+      const label = inc.name || inc.category || 'Income';
+      const cur = inc.currency || defaultCurrencyCode;
+      if (!inc.confirmedMonths?.[currentPeriodKey]) {
+        items.push({
+          id: `income-pending-${inc.id}-${currentPeriodKey}`,
+          kind: 'income_pending',
+          title: `Pending Income: ${label}`,
+          message: `${fmt(amt, cur)} scheduled (${inc.frequency || 'monthly'}) — confirm when received.`,
+          targetMenu: 'Income',
+        });
+      } else {
+        items.push({
+          id: `income-confirmed-${inc.id}-${currentPeriodKey}`,
+          kind: 'income_update',
+          title: `Income Confirmed: ${label}`,
+          message: `${fmt(amt, cur)} recorded in your account for ${currentPeriodKey}.`,
+          targetMenu: 'Income',
+        });
+      }
+    });
+
+    return items;
+  }, [bills, plannedBudget, expenses, recurringIncomes, currencies, defaultCurrencyCode]);
+
+  const activeNotifications = useMemo(
+    () => notifications.filter(n => !dismissedNotifications.includes(n.id)),
+    [notifications, dismissedNotifications]
+  );
+
   if (!isLoggedIn) {
     return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
@@ -1141,10 +1269,134 @@ const Dashboard = () => {
               {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5" />}
             </button>
 
-            <button className="relative transition-colors hover:opacity-80 cursor-pointer" style={{ color: COLORS.textSecondary }}>
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2" style={{ backgroundColor: COLORS.red, borderColor: COLORS.bgMain }}></span>
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setNotificationsOpen(prev => !prev);
+                  setProfileDropdownOpen(false);
+                }}
+                className="relative transition-colors hover:opacity-80 cursor-pointer"
+                style={{ color: COLORS.textSecondary }}
+                title="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                {activeNotifications.length > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center border-2"
+                    style={{ backgroundColor: COLORS.red, borderColor: COLORS.bgMain }}
+                  >
+                    {activeNotifications.length > 9 ? '9+' : activeNotifications.length}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setNotificationsOpen(false)}
+                  />
+                  <div
+                    className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border shadow-2xl z-50 overflow-hidden"
+                    style={{
+                      backgroundColor: COLORS.bgCard,
+                      borderColor: COLORS.border,
+                      boxShadow: '0 15px 35px -5px rgba(0, 0, 0, 0.4)',
+                    }}
+                  >
+                    <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: COLORS.border }}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold" style={{ color: COLORS.textPrimary }}>
+                          Notifications
+                        </span>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-[#4FD1F5]/15 text-[#4FD1F5]">
+                          {activeNotifications.length}
+                        </span>
+                      </div>
+                      {activeNotifications.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setDismissedNotifications(notifications.map(n => n.id))}
+                          className="text-xs font-semibold text-[#4FD1F5] hover:underline cursor-pointer"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-96 overflow-y-auto divide-y" style={{ borderColor: COLORS.border }}>
+                      {activeNotifications.length === 0 ? (
+                        <div className="px-4 py-8 text-center">
+                          <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-400 opacity-80" />
+                          <p className="text-sm font-medium" style={{ color: COLORS.textPrimary }}>
+                            All caught up!
+                          </p>
+                          <p className="text-xs mt-0.5" style={{ color: COLORS.textSecondary }}>
+                            No pending payments or alerts right now.
+                          </p>
+                        </div>
+                      ) : (
+                        activeNotifications.map(item => {
+                          const isOverdue = item.kind === 'overdue';
+                          const isIncomeUpdate = item.kind === 'income_update';
+                          const accentColor = isOverdue
+                            ? COLORS.red
+                            : isIncomeUpdate
+                              ? COLORS.green
+                              : item.kind === 'income_pending'
+                                ? '#4FD1F5'
+                                : COLORS.orange;
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => {
+                                setActiveMenu(item.targetMenu);
+                                setNotificationsOpen(false);
+                              }}
+                              className="px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer flex items-start gap-3"
+                              style={{ borderColor: COLORS.border }}
+                            >
+                              <div
+                                className="p-2 rounded-xl shrink-0 mt-0.5"
+                                style={{ backgroundColor: `${accentColor}20`, color: accentColor }}
+                              >
+                                {isOverdue ? (
+                                  <AlertTriangle className="w-4 h-4" />
+                                ) : isIncomeUpdate ? (
+                                  <CheckCircle2 className="w-4 h-4" />
+                                ) : (
+                                  <Clock className="w-4 h-4" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold truncate" style={{ color: COLORS.textPrimary }}>
+                                  {item.title}
+                                </p>
+                                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: COLORS.textSecondary }}>
+                                  {item.message}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDismissedNotifications(prev => [...prev, item.id]);
+                                }}
+                                className="p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+                                style={{ color: COLORS.textSecondary }}
+                                title="Dismiss"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             <div className="relative">
               <button 
