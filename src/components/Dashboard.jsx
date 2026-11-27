@@ -79,7 +79,8 @@ import { ExpensesView } from './views/ExpensesView';
 import { IncomeView } from './views/IncomeView';
 import { AccountsView } from './views/AccountsView';
 import { BudgetView } from './views/BudgetView';
-import { BillsView, DEFAULT_BILLS } from './views/BillsView';
+import { BillsView } from './views/BillsView';
+import { DEFAULT_BILLS } from '../utils/budgetUtils';
 import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
@@ -93,7 +94,7 @@ import { Login } from './Login';
 import { THEMES } from '../constants/themes';
 import { ALL_CURRENCIES } from '../constants/currencies';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
-import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings } from '../utils/dataSync';
+import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings, safeJsonParse } from '../utils/dataSync';
 import { getTodayDateString } from '../utils/currencyUtils';
 
 
@@ -211,7 +212,7 @@ const Dashboard = () => {
   // Default includes AED as the primary currency
   const [currencies, setCurrencies] = useState(() => {
     const cached = localStorage.getItem('budget_currencies');
-    const parsed = cached ? JSON.parse(cached) : [
+    const parsed = safeJsonParse(cached, null) || [
       { code: 'USD', name: 'United States Dollar (USD)', symbol: '$' },
       { code: 'GBP', name: 'British Pound (GBP)', symbol: '£' },
       { code: 'EUR', name: 'Euro (EUR)', symbol: '€' },
@@ -241,7 +242,7 @@ const Dashboard = () => {
   //     branch, country, accountNumbers[] }
   const [bankAccounts, setBankAccounts] = useState(() => {
     const cached = localStorage.getItem('budget_bank_accounts');
-    const baseList = cached ? JSON.parse(cached) : [
+    const baseList = safeJsonParse(cached, null) || [
       { id: 'b1', bankName: 'BOC', accountType: 'Savings', currency: 'LKR', balance: 250000, accountNumbers: ['1204-5678-9012'], balances: [250000] },
       { id: 'b2', bankName: 'Commercial Bank', accountType: 'Credit Card', currency: 'AED', limit: 10000, remainingLimit: 7500 },
       { id: 'b3', bankName: 'Sampath Bank', accountType: 'Savings', currency: 'LKR', balance: 120000, accountNumbers: ['9081-2345-6789'], balances: [120000] }
@@ -273,29 +274,24 @@ const Dashboard = () => {
   
   // Custom user-added items for the bank modal dropdowns (Google Sheets cloud)
   const [customBanks, setCustomBanks] = useState(() => {
-    const cached = localStorage.getItem('budget_custom_banks');
-    return cached ? JSON.parse(cached) : [];
+    return safeJsonParse(localStorage.getItem('budget_custom_banks'), []);
   });
 
   const [customAccountTypes, setCustomAccountTypes] = useState(() => {
-    const cached = localStorage.getItem('budget_custom_account_types');
-    return cached ? JSON.parse(cached) : [];
+    return safeJsonParse(localStorage.getItem('budget_custom_account_types'), []);
   });
 
   const [customBranches, setCustomBranches] = useState(() => {
-    const cached = localStorage.getItem('budget_custom_branches');
-    return cached ? JSON.parse(cached) : [];
+    return safeJsonParse(localStorage.getItem('budget_custom_branches'), []);
   });
 
   const [plannedBudget, setPlannedBudget] = useState(() => {
-    const cached = localStorage.getItem('budget_settings');
-    const parsed = cached ? JSON.parse(cached) : {};
+    const parsed = safeJsonParse(localStorage.getItem('budget_settings'), {});
     return parsed?.plannedBudget || { income: 0, expenses: 0 };
   });
 
   const [bills, setBills] = useState(() => {
-    const cached = localStorage.getItem('budget_settings');
-    const parsed = cached ? JSON.parse(cached) : {};
+    const parsed = safeJsonParse(localStorage.getItem('budget_settings'), {});
     return Array.isArray(parsed?.bills) && parsed.bills.length > 0 ? parsed.bills : DEFAULT_BILLS;
   });
 
@@ -368,15 +364,18 @@ const Dashboard = () => {
       const expData = await fetchExpenses();
       const hydratedExp = (expData || []).map(exp => ({ ...exp, icon: getIcon(exp.category) }));
       setExpenses(hydratedExp);
-      const uniqueYears = Array.from(new Set(hydratedExp.map(e => e.date?.split('-')[0]).filter(Boolean)));
-      const currentYear = new Date().getFullYear().toString();
-      if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
-      setYears(uniqueYears.sort((a, b) => b - a));
-
       // 2. Incomes
       const incData = await fetchIncomes();
       const hydratedInc = (incData || []).map(inc => ({ ...inc, icon: getIcon(inc.category) }));
       setIncomes(hydratedInc);
+
+      const uniqueYears = Array.from(new Set([
+        ...hydratedExp.map(e => e.date?.split('-')[0]),
+        ...hydratedInc.map(i => i.date?.split('-')[0]),
+      ].filter(Boolean)));
+      const currentYear = new Date().getFullYear().toString();
+      if (!uniqueYears.includes(currentYear)) uniqueYears.push(currentYear);
+      setYears(uniqueYears.sort((a, b) => b - a));
 
       // 3. Bank Accounts
       const bankData = await fetchBankAccounts();
@@ -766,26 +765,29 @@ const Dashboard = () => {
   const dashboardPrevExpenses     = prevExpenses.filterUpToDate(todayStr);
   const dashboardPrevIncomes      = prevIncomes.filterUpToDate(todayStr);
 
-  // All currencies that have at least one non-zero transaction in the current period OR have a non-zero bank balance
+  const realizedIncomesCollection = budgetService.incomesCollection.filterUpToDate(todayStr);
+  const realizedExpensesCollection = budgetService.expensesCollection.filterUpToDate(todayStr);
+  const cashIncomesSumByCurrency = realizedIncomesCollection.filterCash().sumByCurrency();
+  const cashExpensesSumByCurrency = realizedExpensesCollection.filterCash().sumByCurrency();
+
+  // All currencies that have at least one non-zero transaction in the current period OR a non-zero bank/cash balance
   const activeCurrenciesForPeriod = Array.from(new Set([
     ...filteredIncomes.getUniqueCurrencies(),
     ...filteredExpenses.getUniqueCurrencies(),
-    ...Object.keys(bankBalancesSumByCurrency)
+    ...Object.keys(bankBalancesSumByCurrency),
+    ...Object.keys(cashIncomesSumByCurrency),
+    ...Object.keys(cashExpensesSumByCurrency),
   ])).filter(cur => 
-    (incomesSumByCurrency[cur] || 0) > 0 || 
-    (expensesSumByCurrency[cur] || 0) > 0 || 
-    (bankBalancesSumByCurrency[cur] || 0) > 0
+    (incomesSumByCurrency[cur] || 0) !== 0 || 
+    (expensesSumByCurrency[cur] || 0) !== 0 || 
+    (bankBalancesSumByCurrency[cur] || 0) !== 0 ||
+    ((cashIncomesSumByCurrency[cur] || 0) - (cashExpensesSumByCurrency[cur] || 0)) !== 0
   );
 
   // Fall back to the default currency if nothing has been entered yet
   const activeCurrencies = activeCurrenciesForPeriod.length > 0
     ? activeCurrenciesForPeriod
     : [currencyCode];
-
-  const realizedIncomesCollection = budgetService.incomesCollection.filterUpToDate(todayStr);
-  const realizedExpensesCollection = budgetService.expensesCollection.filterUpToDate(todayStr);
-  const cashIncomesSumByCurrency = realizedIncomesCollection.filterCash().sumByCurrency();
-  const cashExpensesSumByCurrency = realizedExpensesCollection.filterCash().sumByCurrency();
 
   // Calculate balances by currency: cash balance (all-time up to today cash income - cash expense) + bank details account balances (up to today)
   const balancesByCurrency = activeCurrencies.reduce((acc, cur) => {

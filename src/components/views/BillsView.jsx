@@ -1,11 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Calendar, ChevronDown, Plus, X, Landmark, Trash2, Repeat } from 'lucide-react';
 import { formatCurrency } from '../../utils/currencyUtils';
-
-export const DEFAULT_BILLS = [
-  { id: 'bill-mobile', name: 'Mobile', defaultAmount: 0, monthlyOverrides: {}, bankAccount: '', dueDay: '' },
-  { id: 'bill-house-rent', name: 'House Rent', defaultAmount: 0, monthlyOverrides: {}, bankAccount: '', dueDay: '' },
-];
+import { DEFAULT_BILLS } from '../../utils/budgetUtils';
 
 /**
  * BillsView

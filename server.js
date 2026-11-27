@@ -15,15 +15,36 @@ dotenv.config({ path: join(__dirname, '.env') });
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = process.env.ALLOWED_ORIGIN
+  ? process.env.ALLOWED_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
+app.use(express.json({ limit: '1mb' }));
 
 // Google Sheets configuration
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-const SPREADSHEET_ID = '1ToCC37m9tVw-jw0lj9OuztpeiwEvBY4fpaboD6mRo4M'; 
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID || '';
+
+// Prevent Google Sheets formula injection on string cells
+const sanitizeCell = (val) => {
+  if (typeof val !== 'string') return val;
+  return /^[=+\-@\t\r]/.test(val) ? `'${val}` : val;
+};
 
 // Prepare auth
 const getAuthClient = () => {
+  if (!SPREADSHEET_ID) {
+    throw new Error('SPREADSHEET_ID is not configured in .env file.');
+  }
   // If credential placeholders are present, throw an error
   if (!process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL.includes('your-service-account') || !process.env.GOOGLE_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY.includes('YOUR_PRIVATE_KEY')) {
     throw new Error('Google Sheets API credentials are not configured in .env file.');
@@ -67,7 +88,7 @@ app.get('/api/expenses', async (req, res) => {
     res.json(expenses);
   } catch (error) {
     console.error('Error fetching data from Google Sheets:', error.message);
-    res.status(500).json({ error: error.message || 'Failed to fetch data' });
+    res.status(500).json({ error: 'Failed to fetch data' });
   }
 });
 
@@ -85,13 +106,13 @@ app.post('/api/expenses', async (req, res) => {
     // Format data rows
     const headerRow = ['ID', 'Date', 'Category', 'SubCategory', 'Amount', 'Account', 'Notes'];
     const dataRows = expenses.map(e => [
-      e.id,
-      e.date || '',
-      e.category || '',
-      e.subCategory || '',
-      e.amount || 0,
-      e.account || 'Cash',
-      e.notes || ''
+      sanitizeCell(e.id),
+      sanitizeCell(e.date || ''),
+      sanitizeCell(e.category || ''),
+      sanitizeCell(e.subCategory || ''),
+      Number(e.amount) || 0,
+      sanitizeCell(e.account || 'Cash'),
+      sanitizeCell(e.notes || '')
     ]);
 
     const values = [headerRow, ...dataRows];
@@ -106,14 +127,14 @@ app.post('/api/expenses', async (req, res) => {
     const response = await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: 'Expenses!A1',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       requestBody: { values },
     });
 
     res.json({ message: 'Expenses synced successfully', data: response.data });
   } catch (error) {
     console.error('Error syncing transactions to Google Sheets:', error.message);
-    res.status(500).json({ error: error.message || 'Failed to sync transactions' });
+    res.status(500).json({ error: 'Failed to sync transactions' });
   }
 });
 
@@ -146,7 +167,7 @@ app.get('/api/incomes', async (req, res) => {
     res.json(incomes);
   } catch (error) {
     console.error('Error fetching incomes from Google Sheets:', error.message);
-    res.status(500).json({ error: error.message || 'Failed to fetch data' });
+    res.status(500).json({ error: 'Failed to fetch data' });
   }
 });
 
@@ -164,13 +185,13 @@ app.post('/api/incomes', async (req, res) => {
     // Format data rows
     const headerRow = ['ID', 'Date', 'Category', 'SubCategory', 'Amount', 'Account', 'Notes'];
     const dataRows = incomes.map(i => [
-      i.id,
-      i.date || '',
-      i.category || '',
-      i.subCategory || '',
-      i.amount || 0,
-      i.account || 'Cash',
-      i.notes || ''
+      sanitizeCell(i.id),
+      sanitizeCell(i.date || ''),
+      sanitizeCell(i.category || ''),
+      sanitizeCell(i.subCategory || ''),
+      Number(i.amount) || 0,
+      sanitizeCell(i.account || 'Cash'),
+      sanitizeCell(i.notes || '')
     ]);
 
     const values = [headerRow, ...dataRows];
@@ -185,14 +206,14 @@ app.post('/api/incomes', async (req, res) => {
     const response = await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: 'Incomes!A1',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       requestBody: { values },
     });
 
     res.json({ message: 'Incomes synced successfully', data: response.data });
   } catch (error) {
     console.error('Error syncing incomes to Google Sheets:', error.message);
-    res.status(500).json({ error: error.message || 'Failed to sync incomes' });
+    res.status(500).json({ error: 'Failed to sync incomes' });
   }
 });
 

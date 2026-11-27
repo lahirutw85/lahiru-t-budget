@@ -207,6 +207,11 @@ export const formatPeriodLabel = (periodKey) => {
   return idx >= 0 && idx < 12 ? `${SHORT[idx]} ${y}` : periodKey;
 };
 
+export const DEFAULT_BILLS = [
+  { id: 'bill-mobile', name: 'Mobile', defaultAmount: 0, monthlyOverrides: {}, bankAccount: '', dueDay: '' },
+  { id: 'bill-house-rent', name: 'House Rent', defaultAmount: 0, monthlyOverrides: {}, bankAccount: '', dueDay: '' },
+];
+
 /**
  * Given a startPeriod ('YYYY-MM') and total months to pay (>= 1),
  * returns the inclusive endPeriod ('YYYY-MM').

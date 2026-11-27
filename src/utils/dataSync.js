@@ -11,6 +11,15 @@
 const GAS_URL = import.meta.env.VITE_GAS_URL || '';
 const hasGAS  = () => Boolean(GAS_URL && GAS_URL.startsWith('https://'));
 
+export const safeJsonParse = (raw, fallback) => {
+  if (!raw || typeof raw !== 'string') return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+
 // ── Shared POST to GAS ───────────────────────────────────────
 const gasPost = async (payload) => {
   if (!hasGAS()) return;
@@ -53,7 +62,7 @@ export const fetchExpenses = async () => {
     return cloud;
   }
   const cached = localStorage.getItem('budget_expenses');
-  return cached ? JSON.parse(cached) : [];
+  return safeJsonParse(cached, []);
 };
 
 // ── INCOMES ──────────────────────────────────────────────────
@@ -68,7 +77,7 @@ export const fetchIncomes = async () => {
     return cloud;
   }
   const cached = localStorage.getItem('budget_incomes');
-  return cached ? JSON.parse(cached) : [];
+  return safeJsonParse(cached, []);
 };
 
 // ── BANK ACCOUNTS ────────────────────────────────────────────
@@ -83,7 +92,7 @@ export const fetchBankAccounts = async () => {
     return cloud; // may be [] (no accounts) or array of accounts
   }
   const cached = localStorage.getItem('budget_bank_accounts');
-  return cached ? JSON.parse(cached) : null; // null = use app defaults
+  return safeJsonParse(cached, null); // null = use app defaults
 };
 
 // ── CURRENCIES ───────────────────────────────────────────────
@@ -98,7 +107,7 @@ export const fetchCurrencies = async () => {
     return cloud;
   }
   const cached = localStorage.getItem('budget_currencies');
-  return cached ? JSON.parse(cached) : null; // null = use app defaults
+  return safeJsonParse(cached, null); // null = use app defaults
 };
 
 // ── APP SETTINGS (customBanks, customTypes, customBranches) ──
@@ -111,12 +120,14 @@ export const fetchSettings = async () => {
   if (cloud !== null && cloud.length > 0) {
     // GAS returns array of [{key, value}] rows
     const obj = {};
-    cloud.forEach(row => { if (row.key) obj[row.key] = JSON.parse(row.value || '[]'); });
+    cloud.forEach(row => {
+      if (row.key) obj[row.key] = safeJsonParse(row.value || '[]', []);
+    });
     if (Object.keys(obj).length > 0) {
       localStorage.setItem('budget_settings', JSON.stringify(obj));
       return obj;
     }
   }
   const cached = localStorage.getItem('budget_settings');
-  return cached ? JSON.parse(cached) : {};
+  return safeJsonParse(cached, {});
 };

@@ -2,6 +2,17 @@ import { useState } from 'react';
 import { Wallet, Users, Lock } from 'lucide-react';
 import { THEMES } from '../constants/themes';
 
+const AUTH_USERNAME = import.meta.env.VITE_AUTH_USERNAME || 'lahirut85';
+const AUTH_PASS_HASH = import.meta.env.VITE_AUTH_PASS_HASH || '5c2a24625b8254fa3a97166baa5566014554667051ba3b7938f7eb2e6031216a';
+
+const sha256Hex = async (text) => {
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+};
+
 export const Login = ({ onLoginSuccess }) => {
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -9,9 +20,10 @@ export const Login = ({ onLoginSuccess }) => {
   
   const COLORS = THEMES.dark;
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    if (loginUsername === 'lahirut85' && loginPassword === 'Sheran@2591277') {
+    const enteredHash = await sha256Hex(loginPassword);
+    if (loginUsername.trim() === AUTH_USERNAME && enteredHash === AUTH_PASS_HASH) {
       sessionStorage.setItem('isLoggedIn', 'true');
       onLoginSuccess();
       setLoginError('');
