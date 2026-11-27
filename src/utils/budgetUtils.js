@@ -121,6 +121,8 @@ export const normalizeBudgetCategories = (rawCategories) => {
       forwardChanges: cat.forwardChanges || {},
       startPeriod: cat.startPeriod || '',
       endPeriod: cat.endPeriod || '',
+      loanTotalAmount: parseFloat(cat.loanTotalAmount || 0) || 0,
+      loanTotalMonths: parseInt(cat.loanTotalMonths || 0, 10) || 0,
       subCategories: subs.map(s => ({
         ...s,
         defaultAmount: parseFloat(s.defaultAmount ?? s.amount ?? 0) || 0,
@@ -128,6 +130,8 @@ export const normalizeBudgetCategories = (rawCategories) => {
         forwardChanges: s.forwardChanges || {},
         startPeriod: s.startPeriod || '',
         endPeriod: s.endPeriod || '',
+        loanTotalAmount: parseFloat(s.loanTotalAmount || 0) || 0,
+        loanTotalMonths: parseInt(s.loanTotalMonths || 0, 10) || 0,
       })),
     };
   });
@@ -201,4 +205,67 @@ export const formatPeriodLabel = (periodKey) => {
   const idx = parseInt(m, 10) - 1;
   const SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return idx >= 0 && idx < 12 ? `${SHORT[idx]} ${y}` : periodKey;
+};
+
+/**
+ * Given a startPeriod ('YYYY-MM') and total months to pay (>= 1),
+ * returns the inclusive endPeriod ('YYYY-MM').
+ * Example: start '2026-11', months 12 -> '2027-10'.
+ */
+export const computeEndPeriodFromMonths = (startPeriod, totalMonths) => {
+  const months = parseInt(totalMonths, 10);
+  if (!startPeriod || !startPeriod.includes('-') || !months || months < 1) return '';
+  const [y, m] = startPeriod.split('-').map(Number);
+  if (!y || !m) return '';
+  const totalIndex = (y * 12 + (m - 1)) + (months - 1);
+  const endY = Math.floor(totalIndex / 12);
+  const endM = (totalIndex % 12) + 1;
+  return `${endY}-${String(endM).padStart(2, '0')}`;
+};
+
+/**
+ * Computes loan progress as of `periodKey` ('YYYY-MM'):
+ *  - paidSoFar: sum of resolved monthly payments from startPeriod through min(periodKey, endPeriod)
+ *  - remainingAmount: max(0, loanTotalAmount - paidSoFar)
+ *  - monthsElapsed: number of months elapsed up to periodKey
+ *  - monthsRemaining: max(0, loanTotalMonths - monthsElapsed)
+ */
+export const computeLoanProgress = (item, periodKey) => {
+  const fullAmount = parseFloat(item?.loanTotalAmount || 0) || 0;
+  const totalMonths = parseInt(item?.loanTotalMonths || 0, 10) || 0;
+  const start = item?.startPeriod || '';
+  const end = item?.endPeriod || computeEndPeriodFromMonths(start, totalMonths);
+
+  if (fullAmount <= 0 || totalMonths <= 0 || !start) {
+    return { fullAmount, totalMonths, paidSoFar: 0, remainingAmount: fullAmount, monthsElapsed: 0, monthsRemaining: totalMonths };
+  }
+
+  const toIndex = (pk) => {
+    const [y, m] = pk.split('-').map(Number);
+    return y * 12 + (m - 1);
+  };
+
+  const startIdx = toIndex(start);
+  const currentIdx = toIndex(periodKey);
+  const endIdx = end ? toIndex(end) : startIdx + totalMonths - 1;
+
+  if (currentIdx < startIdx) {
+    return { fullAmount, totalMonths, paidSoFar: 0, remainingAmount: fullAmount, monthsElapsed: 0, monthsRemaining: totalMonths };
+  }
+
+  const effectiveEndIdx = Math.min(currentIdx, endIdx);
+  const monthsElapsed = Math.min(totalMonths, Math.max(0, effectiveEndIdx - startIdx + 1));
+
+  let paidSoFar = 0;
+  for (let idx = startIdx; idx <= effectiveEndIdx; idx++) {
+    const y = Math.floor(idx / 12);
+    const m = (idx % 12) + 1;
+    const pk = `${y}-${String(m).padStart(2, '0')}`;
+    paidSoFar += resolveItemAmountForPeriod(item, pk);
+  }
+
+  const remainingAmount = Math.max(0, fullAmount - paidSoFar);
+  const monthsRemaining = Math.max(0, totalMonths - monthsElapsed);
+
+  return { fullAmount, totalMonths, paidSoFar, remainingAmount, monthsElapsed, monthsRemaining };
 };

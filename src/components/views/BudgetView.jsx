@@ -6,6 +6,8 @@ import {
   resolveItemAmountForPeriod,
   resolveCategoryTotalForPeriod,
   formatPeriodLabel,
+  computeEndPeriodFromMonths,
+  computeLoanProgress,
 } from '../../utils/budgetUtils';
 
 const makeSub = (id, name) => ({
@@ -128,6 +130,8 @@ export const BudgetView = ({
   const [subApplyMode, setSubApplyMode] = useState('forward');
   const [subStartPeriod, setSubStartPeriod] = useState('');
   const [subEndPeriod, setSubEndPeriod] = useState('');
+  const [subLoanTotalAmount, setSubLoanTotalAmount] = useState('');
+  const [subLoanTotalMonths, setSubLoanTotalMonths] = useState('');
 
   const totalCategoryBudget = categories.reduce(
     (sum, c) => sum + resolveCategoryTotalForPeriod(c, periodKey),
@@ -262,8 +266,21 @@ export const BudgetView = ({
     setSubAmount(String(resolveItemAmountForPeriod(sub, periodKey)));
     setSubBankAccount(sub.bankAccount || '');
     setSubApplyMode(hasOverride ? 'single' : 'forward');
-    setSubStartPeriod(sub.startPeriod || '');
+    setSubStartPeriod(sub.startPeriod || (isLoan ? periodKey : ''));
     setSubEndPeriod(sub.endPeriod || '');
+    setSubLoanTotalAmount(sub.loanTotalAmount ? String(sub.loanTotalAmount) : '');
+    setSubLoanTotalMonths(sub.loanTotalMonths ? String(sub.loanTotalMonths) : '');
+  };
+
+  const recalcLoanFields = (nextFullStr, nextMonthsStr, nextStart) => {
+    const full = parseFloat(nextFullStr);
+    const months = parseInt(nextMonthsStr, 10);
+    if (full > 0 && months > 0) {
+      setSubAmount((full / months).toFixed(2));
+    }
+    if (nextStart && months > 0) {
+      setSubEndPeriod(computeEndPeriodFromMonths(nextStart, months));
+    }
   };
 
   const handleSaveSubCategory = (e) => {
@@ -275,6 +292,12 @@ export const BudgetView = ({
       return;
     }
     const numericAmount = Math.max(0, parseFloat(subAmount) || 0);
+    const numericLoanTotal = Math.max(0, parseFloat(subLoanTotalAmount) || 0);
+    const numericLoanMonths = Math.max(0, parseInt(subLoanTotalMonths, 10) || 0);
+    const computedEnd = subStartPeriod && numericLoanMonths > 0
+      ? computeEndPeriodFromMonths(subStartPeriod, numericLoanMonths)
+      : subEndPeriod;
+
     const updatedCategories = categories.map(c => {
       if (c.id !== editingSubTarget.catId) return c;
       return {
@@ -286,7 +309,9 @@ export const BudgetView = ({
             name: trimmed,
             bankAccount: subBankAccount,
             startPeriod: subStartPeriod,
-            endPeriod: subEndPeriod,
+            endPeriod: computedEnd,
+            loanTotalAmount: numericLoanTotal,
+            loanTotalMonths: numericLoanMonths,
           };
           return applyItemAmountUpdate(updatedSub, periodKey, numericAmount, subApplyMode);
         }),
@@ -457,6 +482,9 @@ export const BudgetView = ({
                     {subs.map((sub) => {
                       const subVal = resolveItemAmountForPeriod(sub, periodKey);
                       const subHasRange = !!(sub.startPeriod || sub.endPeriod);
+                      const loanInfo = (sub.loanTotalAmount > 0 && sub.loanTotalMonths > 0)
+                        ? computeLoanProgress(sub, periodKey)
+                        : null;
                       return (
                         <div
                           key={sub.id}
@@ -482,6 +510,14 @@ export const BudgetView = ({
                                 </span>
                               )}
                             </div>
+                            {loanInfo && (
+                              <div className="text-[11px] mt-0.5" style={{ color: COLORS.textSecondary }}>
+                                Full: {formatCurrency(loanInfo.fullAmount, currencyCode, currencies)} • {loanInfo.totalMonths} mos •{' '}
+                                <span style={{ color: COLORS.orange }}>
+                                  Remaining: {formatCurrency(loanInfo.remainingAmount, currencyCode, currencies)} ({loanInfo.monthsRemaining} mos left)
+                                </span>
+                              </div>
+                            )}
                             {sub.bankAccount && (
                               <div className="flex items-center gap-1.5 text-[11px] mt-0.5 font-medium" style={{ color: COLORS.skyBlue }}>
                                 <Landmark className="w-3 h-3 shrink-0" />
@@ -768,7 +804,7 @@ export const BudgetView = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveSubCategory} className="p-6 space-y-4">
+            <form onSubmit={handleSaveSubCategory} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
                   Sub-category Name
@@ -783,9 +819,77 @@ export const BudgetView = ({
                 />
               </div>
 
+              {editingSubTarget.isLoan && (
+                <div className="p-3.5 rounded-xl border space-y-3" style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border }}>
+                  <div className="text-xs font-bold uppercase tracking-wider" style={{ color: COLORS.skyBlue }}>
+                    Loan Calculator
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: COLORS.textSecondary }}>
+                        Full Amount ({currencyCode})
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={subLoanTotalAmount}
+                        onChange={(e) => {
+                          setSubLoanTotalAmount(e.target.value);
+                          recalcLoanFields(e.target.value, subLoanTotalMonths, subStartPeriod);
+                        }}
+                        placeholder="e.g. 24000"
+                        className="w-full px-3 py-2 rounded-lg border text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                        style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: COLORS.textSecondary }}>
+                        Months to Pay
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={subLoanTotalMonths}
+                        onChange={(e) => {
+                          setSubLoanTotalMonths(e.target.value);
+                          recalcLoanFields(subLoanTotalAmount, e.target.value, subStartPeriod);
+                        }}
+                        placeholder="e.g. 24"
+                        className="w-full px-3 py-2 rounded-lg border text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                        style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                      />
+                    </div>
+                  </div>
+                  {parseFloat(subLoanTotalAmount) > 0 && parseInt(subLoanTotalMonths, 10) > 0 && (() => {
+                    const previewItem = {
+                      loanTotalAmount: parseFloat(subLoanTotalAmount) || 0,
+                      loanTotalMonths: parseInt(subLoanTotalMonths, 10) || 0,
+                      startPeriod: subStartPeriod,
+                      endPeriod: subEndPeriod,
+                      defaultAmount: parseFloat(subAmount) || 0,
+                      forwardChanges: subStartPeriod ? { [subStartPeriod]: parseFloat(subAmount) || 0 } : {},
+                      monthlyOverrides: {},
+                    };
+                    const prog = computeLoanProgress(previewItem, periodKey);
+                    return (
+                      <div className="flex items-center justify-between text-xs pt-2 border-t" style={{ borderColor: COLORS.border }}>
+                        <span style={{ color: COLORS.textSecondary }}>
+                          Remaining ({activeMonth} {selectedYear}):
+                        </span>
+                        <span className="font-bold" style={{ color: COLORS.orange }}>
+                          {formatCurrency(prog.remainingAmount, currencyCode, currencies)} ({prog.monthsRemaining} mos left)
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
-                  Planned Amount ({currencyCode})
+                  Monthly Amount ({currencyCode})
                 </label>
                 <input
                   type="number"
@@ -822,14 +926,17 @@ export const BudgetView = ({
                   <input
                     type="month"
                     value={subStartPeriod}
-                    onChange={(e) => setSubStartPeriod(e.target.value)}
+                    onChange={(e) => {
+                      setSubStartPeriod(e.target.value);
+                      recalcLoanFields(subLoanTotalAmount, subLoanTotalMonths, e.target.value);
+                    }}
                     className="w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
                     style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
-                    End Month &amp; Year
+                    End Month &amp; Year {editingSubTarget.isLoan && subStartPeriod && parseInt(subLoanTotalMonths, 10) > 0 ? '(Auto)' : ''}
                   </label>
                   <input
                     type="month"
