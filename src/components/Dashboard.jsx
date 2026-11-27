@@ -300,7 +300,12 @@ const Dashboard = () => {
     return Array.isArray(parsed?.bills) && parsed.bills.length > 0 ? parsed.bills : DEFAULT_BILLS;
   });
 
-  // Persist all custom bank lists, planning budget, and bills to settings sheet in cloud
+  const [recurringIncomes, setRecurringIncomes] = useState(() => {
+    const parsed = safeJsonParse(localStorage.getItem('budget_settings'), {});
+    return Array.isArray(parsed?.recurringIncomes) ? parsed.recurringIncomes : [];
+  });
+
+  // Persist all custom bank lists, planning budget, bills, and recurring incomes to settings sheet in cloud
   useEffect(() => {
     if (!isDataLoaded) return;
     syncSettings({
@@ -308,9 +313,10 @@ const Dashboard = () => {
       customAccountTypes,
       customBranches,
       plannedBudget,
-      bills
+      bills,
+      recurringIncomes
     });
-  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, isDataLoaded]);
+  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, recurringIncomes, isDataLoaded]);
 
 
 
@@ -417,6 +423,9 @@ const Dashboard = () => {
         }
         if (Array.isArray(settingsData.bills) && settingsData.bills.length > 0) {
           setBills(settingsData.bills);
+        }
+        if (Array.isArray(settingsData.recurringIncomes)) {
+          setRecurringIncomes(settingsData.recurringIncomes);
         }
       }
       setIsDataLoaded(true);
@@ -603,6 +612,33 @@ const Dashboard = () => {
     const updatedExpenses = budgetService.expenses.map(e => e.toJSON());
     setExpenses(updatedExpenses);
     syncExpensesToDatabase(updatedExpenses);
+  };
+
+  const handleRecordConfirmedIncome = ({ date, category, subCategory, amount, currency, bankAccount, notes }) => {
+    const { account, bankName } = resolveAccountForPayment(bankAccount);
+    const saved = budgetService.saveTransaction('income', null, {
+      date,
+      category,
+      subCategory,
+      amount,
+      currency: currency || currencyCode,
+      account,
+      bankName,
+      notes,
+      icon: getIconForCategory(category),
+    });
+    const updatedIncomes = budgetService.incomes.map(i => i.toJSON());
+    setIncomes(updatedIncomes);
+    syncIncomesToDatabase(updatedIncomes);
+    return saved.id;
+  };
+
+  const handleRemoveConfirmedIncome = (incomeId) => {
+    if (!incomeId) return;
+    budgetService.deleteTransaction('income', incomeId);
+    const updatedIncomes = budgetService.incomes.map(i => i.toJSON());
+    setIncomes(updatedIncomes);
+    syncIncomesToDatabase(updatedIncomes);
   };
 
   const handleStartAddCategory = () => {
@@ -1023,6 +1059,7 @@ const Dashboard = () => {
               isDarkMode={isDarkMode}
               plannedBudget={plannedBudget}
               bills={bills}
+              recurringIncomes={recurringIncomes}
               onEditBudget={() => setActiveMenu('Budget')}
               onEditBills={() => setActiveMenu('Bills')}
             />
@@ -1069,6 +1106,11 @@ const Dashboard = () => {
               isDarkMode={isDarkMode}
               handleEditIncome={handleEditIncome}
               handleDeleteIncome={handleDeleteIncome}
+              recurringIncomes={recurringIncomes}
+              setRecurringIncomes={setRecurringIncomes}
+              computedBankAccounts={computedBankAccounts}
+              onRecordConfirmedIncome={handleRecordConfirmedIncome}
+              onRemoveConfirmedIncome={handleRemoveConfirmedIncome}
             />
           ) : activeMenu === 'Accounts' ? (
             <AccountsView

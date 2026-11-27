@@ -1,7 +1,9 @@
-import { Calendar, ChevronDown, Plus, CircleDollarSign, Edit2, Trash2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Calendar, ChevronDown, Plus, CircleDollarSign, Edit2, Trash2, CheckCircle2, Landmark, Repeat, X } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
+import { formatCurrency, getCurrencyRowStyle, formatExpenseDate, getTodayDateString } from '../../utils/currencyUtils';
 import { buildDonutData } from '../../utils/chartUtils';
+import { getRecurringIncomeAmountForPeriod, formatPeriodLabel } from '../../utils/budgetUtils';
 
 export const IncomeView = ({
   COLORS,
@@ -22,7 +24,12 @@ export const IncomeView = ({
   INCOME_CATEGORIES,
   isDarkMode,
   handleEditIncome,
-  handleDeleteIncome
+  handleDeleteIncome,
+  recurringIncomes = [],
+  setRecurringIncomes,
+  computedBankAccounts = [],
+  onRecordConfirmedIncome,
+  onRemoveConfirmedIncome,
 }) => {
   // ─── 1. RESOLVED CURRENCY CODE & SYMBOLS ──────────────────
   const defaultCurrencyObj = currencies.find(c => c.isDefault)
@@ -190,6 +197,151 @@ export const IncomeView = ({
     ? new Date(parseInt(selectedYear, 10) || new Date().getFullYear(), monthIdx + 1, 0).getDate()
     : 31;
   const dayOptions = ['Full Month', ...Array.from({ length: daysInMonth }, (_, i) => String(i + 1))];
+  const periodKey = `${selectedYear}-${String((monthIdx >= 0 ? monthIdx : new Date().getMonth()) + 1).padStart(2, '0')}`;
+
+  // Build flat list of bank account options from existing computedBankAccounts
+  const bankAccountOptions = useMemo(() => {
+    const options = [];
+    computedBankAccounts.forEach(acc => {
+      let base = `${acc.bankName} (${acc.accountType}`;
+      if (acc.branch) base += ` - ${acc.branch}`;
+      if (acc.accountType !== 'Credit Card' && Array.isArray(acc.accountNumbers) && acc.accountNumbers.length > 0) {
+        const validNums = acc.accountNumbers.filter(n => n && n.trim());
+        if (validNums.length > 0) {
+          validNums.forEach(accNo => options.push(`${base} - Acc: ${accNo})`));
+          return;
+        }
+      }
+      options.push(`${base})`);
+    });
+    return options;
+  }, [computedBankAccounts]);
+
+  // Recurring Income modal state
+  const [isRecModalOpen, setIsRecModalOpen] = useState(false);
+  const [editingRecId, setEditingRecId] = useState(null);
+  const [recName, setRecName] = useState('');
+  const [recCategory, setRecCategory] = useState(INCOME_CATEGORIES[0]?.name || 'Salary');
+  const [recAmount, setRecAmount] = useState('');
+  const [recCurrency, setRecCurrency] = useState(currencyCode);
+  const [recStartPeriod, setRecStartPeriod] = useState(periodKey);
+  const [recFrequency, setRecFrequency] = useState('monthly');
+  const [recReceiveDay, setRecReceiveDay] = useState('');
+  const [recBankAccount, setRecBankAccount] = useState('');
+
+  const openNewRecModal = () => {
+    setEditingRecId(null);
+    setRecName('');
+    setRecCategory(INCOME_CATEGORIES[0]?.name || 'Salary');
+    setRecAmount('');
+    setRecCurrency(currencyCode);
+    setRecStartPeriod(periodKey);
+    setRecFrequency('monthly');
+    setRecReceiveDay('');
+    setRecBankAccount('');
+    setIsRecModalOpen(true);
+  };
+
+  const openEditRecModal = (item) => {
+    setEditingRecId(item.id);
+    setRecName(item.name || '');
+    setRecCategory(item.category || INCOME_CATEGORIES[0]?.name || 'Salary');
+    setRecAmount(String(item.amount ?? ''));
+    setRecCurrency(item.currency || currencyCode);
+    setRecStartPeriod(item.startPeriod || periodKey);
+    setRecFrequency(item.frequency || 'monthly');
+    setRecReceiveDay(item.receiveDay || '');
+    setRecBankAccount(item.bankAccount || '');
+    setIsRecModalOpen(true);
+  };
+
+  const handleSaveRecIncome = (e) => {
+    e.preventDefault();
+    if (!setRecurringIncomes) return;
+    const trimmedName = recName.trim();
+    const numericAmount = Math.max(0, parseFloat(recAmount) || 0);
+    if (!trimmedName || numericAmount <= 0) {
+      alert('Please enter a valid income name and amount.');
+      return;
+    }
+
+    if (editingRecId) {
+      setRecurringIncomes(recurringIncomes.map(item =>
+        item.id === editingRecId
+          ? {
+              ...item,
+              name: trimmedName,
+              category: recCategory,
+              amount: numericAmount,
+              currency: recCurrency,
+              startPeriod: recStartPeriod,
+              frequency: recFrequency,
+              receiveDay: recReceiveDay.trim(),
+              bankAccount: recBankAccount,
+            }
+          : item
+      ));
+    } else {
+      setRecurringIncomes([
+        ...recurringIncomes,
+        {
+          id: `rec-inc-${Date.now()}`,
+          name: trimmedName,
+          category: recCategory,
+          amount: numericAmount,
+          currency: recCurrency,
+          startPeriod: recStartPeriod,
+          frequency: recFrequency,
+          receiveDay: recReceiveDay.trim(),
+          bankAccount: recBankAccount,
+          confirmedMonths: {},
+        },
+      ]);
+    }
+    setIsRecModalOpen(false);
+  };
+
+  const handleDeleteRecIncome = (id) => {
+    if (!setRecurringIncomes) return;
+    setRecurringIncomes(recurringIncomes.filter(item => item.id !== id));
+    setIsRecModalOpen(false);
+  };
+
+  const handleToggleConfirmIncome = (e, item) => {
+    e.stopPropagation();
+    if (!setRecurringIncomes) return;
+    const expectedAmount = getRecurringIncomeAmountForPeriod(item, periodKey);
+    if (expectedAmount <= 0) return;
+
+    const existingTxId = item.confirmedMonths?.[periodKey];
+    const nextConfirmed = { ...(item.confirmedMonths || {}) };
+
+    if (existingTxId) {
+      if (onRemoveConfirmedIncome) onRemoveConfirmedIncome(existingTxId);
+      delete nextConfirmed[periodKey];
+    } else if (onRecordConfirmedIncome) {
+      const todayStr = getTodayDateString();
+      let txDate = todayStr.startsWith(periodKey) ? todayStr : `${periodKey}-01`;
+      if (item.receiveDay) {
+        const dayNum = Math.min(daysInMonth, Math.max(1, parseInt(item.receiveDay, 10) || 1));
+        txDate = `${periodKey}-${String(dayNum).padStart(2, '0')}`;
+      }
+      const txId = onRecordConfirmedIncome({
+        date: txDate,
+        category: item.category || 'Salary',
+        subCategory: item.name,
+        amount: expectedAmount,
+        currency: item.currency || currencyCode,
+        bankAccount: item.bankAccount || '',
+        notes: `Confirmed ${item.frequency || 'monthly'} income (${selectedMonth} ${selectedYear})`,
+      });
+      nextConfirmed[periodKey] = txId;
+    }
+
+    setRecurringIncomes(recurringIncomes.map(r =>
+      r.id === item.id ? { ...r, confirmedMonths: nextConfirmed } : r
+    ));
+  };
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-6">
@@ -313,6 +465,107 @@ export const IncomeView = ({
         
       </div>
 
+      {/* Recurring Income Sources */}
+      <div className="p-6 rounded-2xl border" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-lg font-bold" style={{ color: COLORS.textPrimary }}>
+              Recurring Income Schedule
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: COLORS.textSecondary }}>
+              Set your salary or income start month and frequency (daily, weekly, monthly). Confirm when received in your bank account. Double-click to edit.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openNewRecModal}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-opacity hover:opacity-90 cursor-pointer shrink-0"
+            style={{ backgroundColor: COLORS.skyBlue, color: '#0B0F19' }}
+          >
+            <Plus className="w-4 h-4" />
+            Add Recurring Income
+          </button>
+        </div>
+
+        {recurringIncomes.length === 0 ? (
+          <div className="py-6 text-center text-sm" style={{ color: COLORS.textSecondary }}>
+            No recurring income sources configured yet. Click &ldquo;Add Recurring Income&rdquo; to set up your monthly, weekly, or daily income.
+          </div>
+        ) : (
+          <div className="divide-y" style={{ borderColor: COLORS.border }}>
+            {recurringIncomes.map((item) => {
+              const expectedForMonth = getRecurringIncomeAmountForPeriod(item, periodKey);
+              const isConfirmed = Boolean(item.confirmedMonths?.[periodKey]);
+              const freqLabel = item.frequency === 'daily' ? 'Daily' : item.frequency === 'weekly' ? 'Weekly' : 'Monthly';
+
+              return (
+                <div
+                  key={item.id}
+                  onDoubleClick={() => openEditRecModal(item)}
+                  title="Double-click to edit recurring income"
+                  className="py-3.5 px-3 rounded-lg flex items-center justify-between gap-4 cursor-pointer transition-colors hover:bg-white/5 select-none"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-base" style={{ color: COLORS.textPrimary }}>
+                        {item.name}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-white/5" style={{ color: COLORS.textSecondary }}>
+                        {item.category}
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider"
+                        style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', color: COLORS.green }}
+                      >
+                        <Repeat className="w-2.5 h-2.5" />
+                        {freqLabel}
+                      </span>
+                      {item.startPeriod && (
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider"
+                          style={{ backgroundColor: 'rgba(56, 189, 248, 0.12)', color: COLORS.skyBlue }}
+                        >
+                          From {formatPeriodLabel(item.startPeriod)}
+                        </span>
+                      )}
+                    </div>
+                    {item.bankAccount && (
+                      <div className="flex items-center gap-1.5 text-[11px] mt-1 font-medium" style={{ color: COLORS.skyBlue }}>
+                        <Landmark className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{item.bankAccount}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    {expectedForMonth > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleConfirmIncome(e, item)}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-opacity hover:opacity-85 cursor-pointer"
+                        style={{
+                          backgroundColor: isConfirmed ? 'rgba(16, 185, 129, 0.15)' : COLORS.bgMain,
+                          borderColor: isConfirmed ? COLORS.green : COLORS.border,
+                          color: isConfirmed ? COLORS.green : COLORS.textSecondary,
+                        }}
+                        title={isConfirmed ? 'Click to undo bank confirmation' : 'Confirm received in bank account'}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {isConfirmed ? 'Confirmed' : 'Confirm Received'}
+                      </button>
+                    )}
+                    <div className="text-right font-bold text-base" style={{ color: COLORS.green }}>
+                      {formatCurrencyLocal(expectedForMonth, item.currency || currencyCode)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Income List Table */}
       <div className="p-6 rounded-2xl border" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
         <div className="overflow-x-auto">
@@ -377,6 +630,199 @@ export const IncomeView = ({
           </table>
         </div>
       </div>
+
+      {/* Add / Edit Recurring Income Modal */}
+      {isRecModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div
+            className="w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden"
+            style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}
+          >
+            <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: COLORS.border }}>
+              <h3 className="text-lg font-bold" style={{ color: COLORS.textPrimary }}>
+                {editingRecId ? 'Edit Recurring Income' : 'Add Recurring Income'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsRecModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-white/10 cursor-pointer"
+                style={{ color: COLORS.textSecondary }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveRecIncome} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                  Income Source Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={recName}
+                  onChange={(e) => setRecName(e.target.value)}
+                  placeholder="e.g. Regular Salary, Freelance"
+                  className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                  style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Category
+                  </label>
+                  <select
+                    value={recCategory}
+                    onChange={(e) => setRecCategory(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  >
+                    {INCOME_CATEGORIES.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Frequency
+                  </label>
+                  <select
+                    value={recFrequency}
+                    onChange={(e) => setRecFrequency(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  >
+                    <option value="monthly">Every Month</option>
+                    <option value="weekly">Every Week</option>
+                    <option value="daily">Every Day</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Amount
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={recAmount}
+                    onChange={(e) => setRecAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Currency
+                  </label>
+                  <select
+                    value={recCurrency}
+                    onChange={(e) => setRecCurrency(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  >
+                    {currencies.map(c => (
+                      <option key={c.code} value={c.code}>{c.code}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Starting Month &amp; Year
+                  </label>
+                  <input
+                    type="month"
+                    value={recStartPeriod}
+                    onChange={(e) => setRecStartPeriod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                    Receive Day (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={recReceiveDay}
+                    onChange={(e) => setRecReceiveDay(e.target.value)}
+                    placeholder="e.g. 2"
+                    className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                    style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                  Receiving Bank Account
+                </label>
+                <select
+                  value={recBankAccount}
+                  onChange={(e) => setRecBankAccount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                  style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                >
+                  <option value="">-- Select Bank Account --</option>
+                  <option value="Cash">Cash</option>
+                  {bankAccountOptions.map((opt, idx) => (
+                    <option key={idx} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-3 border-t" style={{ borderColor: COLORS.border }}>
+                {editingRecId ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRecIncome(editingRecId)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold hover:bg-red-500/10 cursor-pointer"
+                    style={{ color: COLORS.red }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRecModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold border cursor-pointer hover:opacity-80"
+                    style={{ borderColor: COLORS.border, color: COLORS.textSecondary }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl text-sm font-bold cursor-pointer hover:opacity-90"
+                    style={{ backgroundColor: COLORS.green, color: '#FFFFFF' }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

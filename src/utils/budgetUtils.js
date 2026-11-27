@@ -239,6 +239,39 @@ export const resolveBillsTotalForSelection = (bills, selectedYear, selectedMonth
   return list.reduce((sum, b) => sum + getBillAmountForPeriodKey(b, pk), 0);
 };
 
+export const getRecurringIncomeAmountForPeriod = (item, periodKey) => {
+  if (!item) return 0;
+  if (item.startPeriod && periodKey < item.startPeriod) return 0;
+  const base = parseFloat(item.amount) || 0;
+  if (base <= 0) return 0;
+
+  if (item.frequency === 'daily') {
+    const [y, m] = periodKey.split('-').map(Number);
+    const days = new Date(y, m, 0).getDate();
+    return base * days;
+  }
+  if (item.frequency === 'weekly') {
+    return base * 4;
+  }
+  return base;
+};
+
+export const resolveRecurringIncomeForSelection = (recurringIncomes, selectedYear, selectedMonth, allMonths) => {
+  const list = Array.isArray(recurringIncomes) ? recurringIncomes : [];
+  if (list.length === 0) return 0;
+  if (selectedMonth === 'Full Year') {
+    let total = 0;
+    for (let m = 1; m <= 12; m++) {
+      const pk = `${selectedYear}-${String(m).padStart(2, '0')}`;
+      total += list.reduce((sum, item) => sum + getRecurringIncomeAmountForPeriod(item, pk), 0);
+    }
+    return total;
+  }
+  const idx = allMonths.indexOf(selectedMonth);
+  const pk = `${selectedYear}-${String((idx >= 0 ? idx : new Date().getMonth()) + 1).padStart(2, '0')}`;
+  return list.reduce((sum, item) => sum + getRecurringIncomeAmountForPeriod(item, pk), 0);
+};
+
 /**
  * Given a startPeriod ('YYYY-MM') and total months to pay (>= 1),
  * returns the inclusive endPeriod ('YYYY-MM').

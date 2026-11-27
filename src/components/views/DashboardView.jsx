@@ -6,7 +6,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { convertCurrency, formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
 import { buildDonutData } from '../../utils/chartUtils';
-import { normalizeBudgetCategories, resolveCategoryTotalForPeriod, resolveExpensesBudgetForSelection, DEFAULT_BILLS, getBillAmountForPeriodKey, resolveBillsTotalForSelection } from '../../utils/budgetUtils';
+import { normalizeBudgetCategories, resolveCategoryTotalForPeriod, resolveExpensesBudgetForSelection, DEFAULT_BILLS, getBillAmountForPeriodKey, resolveBillsTotalForSelection, resolveRecurringIncomeForSelection } from '../../utils/budgetUtils';
 
 export const DashboardView = ({
   COLORS,
@@ -32,6 +32,7 @@ export const DashboardView = ({
   isDarkMode,
   plannedBudget = { income: 0, expenses: 0 },
   bills = [],
+  recurringIncomes = [],
   onEditBudget,
   onEditBills
 }) => {
@@ -709,7 +710,8 @@ export const DashboardView = ({
           <div className="space-y-6">
             {(() => {
               const multiplier = selectedMonth === 'Full Year' ? 12 : 1;
-              const budgetIncome = (parseFloat(plannedBudget?.income) || 0) * multiplier;
+              const recurringIncomeBudget = resolveRecurringIncomeForSelection(recurringIncomes, selectedYear, selectedMonth, ALL_MONTHS);
+              const budgetIncome = recurringIncomeBudget > 0 ? recurringIncomeBudget : ((parseFloat(plannedBudget?.income) || 0) * multiplier);
               const budgetExpenses = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS);
               const budgetNet = budgetIncome - budgetExpenses;
               const actualNet = totalIncomeValue - totalExpenditure;
