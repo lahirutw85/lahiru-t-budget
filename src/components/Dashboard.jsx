@@ -44,7 +44,7 @@
 //       with import statements from the paths above.
 // ================================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { BudgetService } from '../models/BudgetService';
 import userProfileImg from '../assets/user_profile.jpg';
 import {
@@ -349,9 +349,39 @@ const Dashboard = () => {
   const [editSubCategoryName,        setEditSubCategoryName]        = useState('');
   const [editSubCategoryIcon,        setEditSubCategoryIcon]        = useState(Star);
 
-  // Expense categories — user can add/edit/delete these at runtime
-  // (Income categories are static INCOME_CATEGORIES constant above)
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+  // Expense categories — derived from the Budget area category list so updates sync automatically
+  const categories = useMemo(() => {
+    const budgetCats = normalizeBudgetCategories(plannedBudget?.categories);
+    return budgetCats.map(bCat => {
+      const initialCat = INITIAL_CATEGORIES.find(
+        c => c.id === bCat.id || c.name.toLowerCase() === bCat.name.toLowerCase()
+      );
+      const parentIcon = initialCat?.icon || Star;
+      return {
+        id: bCat.id,
+        name: bCat.name,
+        icon: parentIcon,
+        subCategories: (bCat.subCategories || []).map(sub => {
+          const initialSub = initialCat?.subCategories?.find(
+            s => s.id === sub.id || s.name.toLowerCase() === sub.name.toLowerCase()
+          );
+          return {
+            id: sub.id,
+            name: sub.name,
+            icon: initialSub?.icon || parentIcon,
+          };
+        }),
+      };
+    });
+  }, [plannedBudget]);
+
+  const setCategories = (updater) => {
+    setPlannedBudget(prev => {
+      const currentList = normalizeBudgetCategories(prev?.categories);
+      const nextList = typeof updater === 'function' ? updater(currentList) : updater;
+      return { ...prev, categories: nextList };
+    });
+  };
 
   // ── §7b: COMPONENT-LEVEL HELPERS ────────────────────────────
 
