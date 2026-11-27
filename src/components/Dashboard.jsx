@@ -95,6 +95,7 @@ import { ALL_CURRENCIES } from '../constants/currencies';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
 import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings, safeJsonParse } from '../utils/dataSync';
 import { getTodayDateString } from '../utils/currencyUtils';
+import { supabase, hasSupabase } from '../utils/supabaseClient';
 
 
 
@@ -159,13 +160,29 @@ const Dashboard = () => {
 
   // Authentication State
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    if (hasSupabase()) return false;
     return sessionStorage.getItem('isLoggedIn') === 'true';
   });
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    if (!hasSupabase() || !supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(Boolean(session));
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(Boolean(session));
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    if (hasSupabase() && supabase) {
+      await supabase.auth.signOut();
+    }
     sessionStorage.removeItem('isLoggedIn');
     setIsLoggedIn(false);
+    setIsDataLoaded(false);
     setProfileDropdownOpen(false);
   };
 
@@ -351,9 +368,9 @@ const Dashboard = () => {
     return foundIncome ? foundIncome.icon : Wallet;
   };
 
-  // On mount, fetch all data from Google Apps Script Web App.
-  // Falls back to localStorage if the cloud is unreachable.
+  // On login / mount, fetch all data from Supabase (with GAS & localStorage fallback).
   useEffect(() => {
+    if (!isLoggedIn) return;
     const loadAll = async () => {
       const getIcon = (catName) => {
         const foundExpense = INITIAL_CATEGORIES.find(c => c.name.toLowerCase() === catName?.toLowerCase());
@@ -422,7 +439,7 @@ const Dashboard = () => {
       setIsDataLoaded(true);
     };
     loadAll();
-  }, []);
+  }, [isLoggedIn]);
 
   const budgetService = new BudgetService(expenses, incomes, bankAccounts);
 

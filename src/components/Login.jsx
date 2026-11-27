@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Wallet, Users, Lock } from 'lucide-react';
+import { Wallet, Users, Lock, Mail } from 'lucide-react';
 import { THEMES } from '../constants/themes';
+import { supabase, hasSupabase } from '../utils/supabaseClient';
 
 const AUTH_USERNAME = import.meta.env.VITE_AUTH_USERNAME || 'lahirut85';
 const AUTH_PASS_HASH = import.meta.env.VITE_AUTH_PASS_HASH || '5c2a24625b8254fa3a97166baa5566014554667051ba3b7938f7eb2e6031216a';
@@ -14,19 +15,62 @@ const sha256Hex = async (text) => {
 };
 
 export const Login = ({ onLoginSuccess }) => {
-  const [loginUsername, setLoginUsername] = useState('');
+  const useSupabaseAuth = hasSupabase();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  
+  const [infoMessage, setInfoMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const COLORS = THEMES.dark;
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
+    setLoginError('');
+    setInfoMessage('');
+
+    if (useSupabaseAuth && supabase) {
+      setIsSubmitting(true);
+      try {
+        const email = loginIdentifier.trim();
+        if (isSignUp) {
+          const { data, error } = await supabase.auth.signUp({
+            email,
+            password: loginPassword,
+          });
+          if (error) {
+            setLoginError(error.message);
+          } else if (data?.session) {
+            onLoginSuccess();
+          } else {
+            setInfoMessage('Account created! Please check your email to confirm, then sign in.');
+            setIsSignUp(false);
+          }
+        } else {
+          const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password: loginPassword,
+          });
+          if (error) {
+            setLoginError(error.message);
+          } else {
+            onLoginSuccess();
+          }
+        }
+      } catch (err) {
+        setLoginError(err.message || 'Authentication failed');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    // Legacy fallback when Supabase is not configured
     const enteredHash = await sha256Hex(loginPassword);
-    if (loginUsername.trim() === AUTH_USERNAME && enteredHash === AUTH_PASS_HASH) {
+    if (loginIdentifier.trim() === AUTH_USERNAME && enteredHash === AUTH_PASS_HASH) {
       sessionStorage.setItem('isLoggedIn', 'true');
       onLoginSuccess();
-      setLoginError('');
     } else {
       setLoginError('Invalid username or password');
     }
@@ -74,18 +118,37 @@ export const Login = ({ onLoginSuccess }) => {
             </div>
           )}
 
+          {infoMessage && (
+            <div 
+              className="p-4 rounded-xl text-sm font-medium border flex items-center gap-3"
+              style={{ 
+                backgroundColor: 'rgba(79, 209, 245, 0.1)', 
+                borderColor: 'rgba(79, 209, 245, 0.2)', 
+                color: '#7DD3FC' 
+              }}
+            >
+              {infoMessage}
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.textSecondary }}>Username</label>
+            <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.textSecondary }}>
+              {useSupabaseAuth ? 'Email' : 'Username'}
+            </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Users className="w-5 h-5" style={{ color: COLORS.textSecondary }} />
+                {useSupabaseAuth ? (
+                  <Mail className="w-5 h-5" style={{ color: COLORS.textSecondary }} />
+                ) : (
+                  <Users className="w-5 h-5" style={{ color: COLORS.textSecondary }} />
+                )}
               </span>
               <input 
-                type="text" 
+                type={useSupabaseAuth ? 'email' : 'text'}
                 required
-                placeholder="Enter your username"
-                value={loginUsername}
-                onChange={(e) => setLoginUsername(e.target.value)}
+                placeholder={useSupabaseAuth ? 'Enter your email' : 'Enter your username'}
+                value={loginIdentifier}
+                onChange={(e) => setLoginIdentifier(e.target.value)}
                 className="block w-full pl-10 pr-4 py-3 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4FD1F5] transition-all border text-white font-medium"
                 style={{ 
                   backgroundColor: '#1C2237', 
@@ -118,18 +181,39 @@ export const Login = ({ onLoginSuccess }) => {
 
           <button 
             type="submit" 
-            className="w-full py-3.5 px-4 font-bold text-sm text-[#0B0F19] rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 cursor-pointer shadow-lg hover:shadow-[#4FD1F5]/20"
+            disabled={isSubmitting}
+            className="w-full py-3.5 px-4 font-bold text-sm text-[#0B0F19] rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 cursor-pointer shadow-lg hover:shadow-[#4FD1F5]/20 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ 
               backgroundColor: '#4FD1F5',
               background: 'linear-gradient(135deg, #4FD1F5 0%, #38BDF8 100%)'
             }}
           >
-            Sign In
+            {isSubmitting
+              ? (isSignUp ? 'Creating Account...' : 'Signing In...')
+              : (isSignUp ? 'Create Account' : 'Sign In')}
           </button>
+
+          {useSupabaseAuth && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUp(prev => !prev);
+                  setLoginError('');
+                  setInfoMessage('');
+                }}
+                className="text-xs font-medium text-[#4FD1F5] hover:underline cursor-pointer"
+              >
+                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Create one"}
+              </button>
+            </div>
+          )}
         </form>
         
         <div className="mt-8 pt-6 border-t text-center text-xs" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
-          <span style={{ color: COLORS.textSecondary }}>Secured with enterprise session encryption</span>
+          <span style={{ color: COLORS.textSecondary }}>
+            {useSupabaseAuth ? 'Secured with Supabase Auth' : 'Secured with enterprise session encryption'}
+          </span>
         </div>
       </div>
     </div>
