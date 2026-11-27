@@ -1,4 +1,5 @@
 import { Settings, HelpCircle, X } from 'lucide-react';
+import logoImg from '../../assets/logo.png';
 
 export const Sidebar = ({
   COLORS,
@@ -23,12 +24,13 @@ export const Sidebar = ({
         fixed inset-y-0 left-0 z-30 w-64 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:flex lg:flex-col
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `} style={{ backgroundColor: COLORS.bgSidebar, borderRight: `1px solid ${COLORS.border}` }}>
-        <div className="flex items-center gap-3 h-20 px-6 border-b" style={{ borderColor: COLORS.border }}>
-          <div className="flex flex-col">
-            <span className="text-xl font-bold" style={{ color: COLORS.skyBlue }}>Budget Master</span>
-            <span className="text-xs font-medium" style={{ color: COLORS.textSecondary }}>Strategic Planning</span>
-          </div>
-          <button className="lg:hidden ml-auto" onClick={() => setSidebarOpen(false)}>
+        <div className="flex items-center justify-between gap-2 h-20 px-4 border-b" style={{ borderColor: COLORS.border }}>
+          <img
+            src={logoImg}
+            alt="LT Budget Master - Strategic Planning"
+            className="h-12 w-auto max-w-[190px] object-contain"
+          />
+          <button className="lg:hidden ml-auto shrink-0" onClick={() => setSidebarOpen(false)}>
             <X className="w-5 h-5" style={{ color: COLORS.textSecondary }} />
           </button>
         </div>
