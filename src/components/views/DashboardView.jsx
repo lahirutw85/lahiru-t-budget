@@ -1,5 +1,5 @@
 import { 
-  Calendar, ChevronDown, Plus, Trash2, CircleDollarSign, 
+  Calendar, ChevronDown, Plus, CircleDollarSign, 
   TrendingUp, TrendingDown, ShoppingCart, Wallet, Home, 
   ArrowUpRight, ArrowDownRight, Briefcase
 } from 'lucide-react';
@@ -18,7 +18,6 @@ export const DashboardView = ({
   setSelectedDay,
   years,
   handleAddYear,
-  handleDeleteYear,
   ALL_MONTHS,
   filteredExpenses,
   filteredIncomes,
@@ -441,14 +440,6 @@ export const DashboardView = ({
             title="Add Year"
           >
             <Plus className="w-5 h-5" />
-          </button>
-          <button 
-            onClick={handleDeleteYear}
-            className="w-10 h-10 rounded-lg flex items-center justify-center transition-opacity hover:opacity-80 cursor-pointer" 
-            style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: COLORS.red }}
-            title="Delete Year"
-          >
-            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>

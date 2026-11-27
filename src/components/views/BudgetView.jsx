@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Folder, TrendingUp, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar, CheckCircle2 } from 'lucide-react';
+import { Folder, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, getTodayDateString } from '../../utils/currencyUtils';
 import {
   normalizeBudgetCategories,
@@ -66,8 +66,6 @@ export const BudgetView = ({
   setSelectedYear,
   years = [],
   ALL_MONTHS = [],
-  dashboardFilteredIncomes,
-  dashboardFilteredExpenses,
   computedBankAccounts = [],
   onRecordPaidExpense,
   onRemovePaidExpense,
@@ -139,10 +137,6 @@ export const BudgetView = ({
     (sum, c) => sum + resolveCategoryTotalForPeriod(c, periodKey),
     0
   );
-
-  const actualIncome = dashboardFilteredIncomes.totalInCurrency(currencyCode);
-  const actualExpenses = dashboardFilteredExpenses.totalInCurrency(currencyCode);
-  const actualNet = actualIncome - actualExpenses;
 
   const persistCategories = (updatedCategories) => {
     const newExpensesTotal = updatedCategories.reduce(
@@ -645,37 +639,6 @@ export const BudgetView = ({
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Current Period Snapshot */}
-      <div
-        className="p-6 rounded-2xl border"
-        style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}
-      >
-        <h2 className="text-base font-bold flex items-center gap-2 mb-4" style={{ color: COLORS.textPrimary }}>
-          <TrendingUp className="w-4 h-4" style={{ color: COLORS.skyBlue }} />
-          Current Period Snapshot ({activeMonth} {selectedYear})
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-          <div className="p-4 rounded-xl border" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgMain }}>
-            <div className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>Actual Income (to date)</div>
-            <div className="text-lg font-bold" style={{ color: COLORS.green }}>
-              {formatCurrency(actualIncome, currencyCode, currencies)}
-            </div>
-          </div>
-          <div className="p-4 rounded-xl border" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgMain }}>
-            <div className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>Actual Expenses (to date)</div>
-            <div className="text-lg font-bold" style={{ color: COLORS.red }}>
-              {formatCurrency(actualExpenses, currencyCode, currencies)}
-            </div>
-          </div>
-          <div className="p-4 rounded-xl border" style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgMain }}>
-            <div className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>Actual Net (to date)</div>
-            <div className="text-lg font-bold" style={{ color: actualNet >= 0 ? COLORS.skyBlue : COLORS.red }}>
-              {formatCurrency(actualNet, currencyCode, currencies)}
-            </div>
-          </div>
         </div>
       </div>
 

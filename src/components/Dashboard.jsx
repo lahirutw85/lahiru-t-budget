@@ -61,13 +61,11 @@ import {
   Sun,
   Bell,
   Lightbulb,
-  Music,
   LayoutDashboard,
   CircleDollarSign,
   Landmark,
   Calendar,
   Folder,
-  Users,
   Menu,
   Presentation,
 } from 'lucide-react';
@@ -80,7 +78,8 @@ import { IncomeView } from './views/IncomeView';
 import { AccountsView } from './views/AccountsView';
 import { BudgetView } from './views/BudgetView';
 import { BillsView } from './views/BillsView';
-import { DEFAULT_BILLS } from '../utils/budgetUtils';
+import { ReportsView } from './views/ReportsView';
+import { DEFAULT_BILLS, normalizeBudgetCategories } from '../utils/budgetUtils';
 import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
@@ -102,45 +101,37 @@ import { getTodayDateString } from '../utils/currencyUtils';
 
 
 const INITIAL_CATEGORIES = [
-  { id: '1', name: 'Home/Rent', icon: Home, subCategories: [
-    { id: 's1', name: 'Mortgage', icon: Home },
-    { id: 's2', name: 'Mortgage-2nd', icon: Home },
-    { id: 's3', name: 'Rent', icon: Home },
-    { id: 's4', name: 'Association fee', icon: Home },
-    { id: 's5', name: 'Property tax', icon: Home }
+  { id: 'cat-food', name: 'Food', icon: ShoppingCart, subCategories: [] },
+  { id: 'cat-ai', name: 'AI', icon: Lightbulb, subCategories: [] },
+  { id: 'cat-transportation', name: 'Transportation', icon: Fuel, subCategories: [
+    { id: 'sub-bus', name: 'Bus', icon: Fuel },
+    { id: 'sub-taxi', name: 'Taxi', icon: Fuel },
+    { id: 'sub-car', name: 'Car', icon: Fuel },
   ]},
-  { id: '2', name: 'Utilities', icon: Lightbulb, subCategories: [
-    { id: 's6', name: 'Electricity', icon: Lightbulb },
-    { id: 's7', name: 'Water', icon: Lightbulb },
-    { id: 's8', name: 'Gas', icon: Lightbulb },
-    { id: 's9', name: 'Internet', icon: Lightbulb }
+  { id: 'cat-shopping', name: 'Shopping', icon: ShoppingBag, subCategories: [
+    { id: 'sub-appliances', name: 'Appliances', icon: ShoppingBag },
+    { id: 'sub-furniture', name: 'Furniture', icon: ShoppingBag },
+    { id: 'sub-kitchen', name: 'Kitchen', icon: ShoppingBag },
+    { id: 'sub-toiletries', name: 'Toiletries', icon: ShoppingBag },
+    { id: 'sub-cloth', name: 'Cloth', icon: ShoppingBag },
   ]},
-  { id: '3', name: 'Food/Groceries', icon: ShoppingCart, subCategories: [
-    { id: 's10', name: 'Groceries', icon: ShoppingCart },
-    { id: 's11', name: 'Restaurant', icon: ShoppingCart },
-    { id: 's12', name: 'Snacks', icon: ShoppingCart }
+  { id: 'cat-emergency-fund', name: 'Emergency Fund', icon: Umbrella, subCategories: [] },
+  { id: 'cat-give', name: 'Give', icon: Star, subCategories: [
+    { id: 'sub-tithe', name: 'Tithe', icon: Star },
+    { id: 'sub-donation', name: 'Donation', icon: Star },
+    { id: 'sub-family', name: 'Family', icon: Star },
+    { id: 'sub-naomi', name: 'Naomi', icon: Star },
   ]},
-  { id: '4', name: 'Departmental', icon: ShoppingBag, subCategories: [
-    { id: 's13', name: 'Clothing', icon: ShoppingBag },
-    { id: 's14', name: 'Electronics', icon: ShoppingBag }
+  { id: 'cat-mobile', name: 'Mobile', icon: Lightbulb, subCategories: [] },
+  { id: 'cat-investment', name: 'Investment', icon: CircleDollarSign, subCategories: [] },
+  { id: 'cat-loan', name: 'Loan', icon: Landmark, subCategories: [
+    { id: 'sub-dib-loan', name: 'DIB Loan', icon: Landmark },
+    { id: 'sub-endb-card', name: 'ENDB CARD', icon: Landmark },
+    { id: 'sub-dib-card', name: 'DIB CARD', icon: Landmark },
   ]},
-  { id: '5', name: 'Entertainment', icon: Music, subCategories: [
-    { id: 's15', name: 'Movies', icon: Music },
-    { id: 's16', name: 'Games', icon: Music },
-    { id: 's17', name: 'Subscribes', icon: Music }
-  ]},
-  { id: '6', name: 'Car/Auto', icon: Fuel, subCategories: [
-    { id: 's18', name: 'Fuel/Gas', icon: Fuel },
-    { id: 's19', name: 'Service', icon: Fuel },
-    { id: 's20', name: 'Parking', icon: Fuel }
-  ]},
-  { id: '7', name: 'Insurance/Medical', icon: Umbrella, subCategories: [
-    { id: 's21', name: 'Insurance', icon: Umbrella },
-    { id: 's22', name: 'Medical', icon: Umbrella }
-  ]},
-  { id: '8', name: 'Misc/One-time', icon: Star, subCategories: [
-    { id: 's23', name: 'General', icon: Star }
-  ]}
+  { id: 'cat-house-rent', name: 'House Rent', icon: Home, subCategories: [] },
+  { id: 'cat-medical', name: 'Medical', icon: Umbrella, subCategories: [] },
+  { id: 'cat-misc-other', name: 'Misc/Other', icon: Star, subCategories: [] },
 ];
 
 // ================================================================
@@ -890,10 +881,36 @@ const Dashboard = () => {
     { name: 'Accounts', icon: Landmark, color: '#0EA5E9' },
     { name: 'Bills', icon: Calendar, color: COLORS.purple },
     { name: 'Budget', icon: Folder, color: COLORS.orange },
-    { name: 'Payees', icon: Users, color: COLORS.green },
     { name: 'Reports', icon: Presentation, color: COLORS.orange },
     { name: 'Search', icon: Search, color: COLORS.red },
   ];
+
+  // Keep expense categories synchronized with Budget categories + Medical + Misc/Other
+  const syncedExpenseCategories = (() => {
+    const budgetCats = normalizeBudgetCategories(plannedBudget?.categories);
+    const merged = [...categories];
+    budgetCats.forEach(bc => {
+      const existing = merged.find(c => c.name.toLowerCase() === bc.name.toLowerCase());
+      if (!existing) {
+        merged.push({
+          id: bc.id,
+          name: bc.name,
+          icon: Star,
+          subCategories: (bc.subCategories || []).map(s => ({ id: s.id, name: s.name, icon: Star })),
+        });
+      } else if (Array.isArray(bc.subCategories) && bc.subCategories.length > 0) {
+        const existingSubs = existing.subCategories || [];
+        const newSubs = [...existingSubs];
+        bc.subCategories.forEach(bs => {
+          if (!newSubs.some(es => es.name.toLowerCase() === bs.name.toLowerCase())) {
+            newSubs.push({ id: bs.id, name: bs.name, icon: existing.icon || Star });
+          }
+        });
+        existing.subCategories = newSubs;
+      }
+    });
+    return merged;
+  })();
 
   const handleAddYear = () => {
     const newYear = window.prompt('Enter new year (e.g. 2027):');
@@ -1054,7 +1071,7 @@ const Dashboard = () => {
               balancesByCurrency={balancesByCurrency}
               activeCurrencies={activeCurrencies}
               currencies={currencies}
-              categories={categories}
+              categories={syncedExpenseCategories}
               INCOME_CATEGORIES={INCOME_CATEGORIES}
               isDarkMode={isDarkMode}
               plannedBudget={plannedBudget}
@@ -1075,7 +1092,7 @@ const Dashboard = () => {
               years={years}
               ALL_MONTHS={ALL_MONTHS}
               setFormType={setFormType}
-              categories={categories}
+              categories={syncedExpenseCategories}
               setEditingExpenseId={setEditingExpenseId}
               setIsAddExpenseOpen={setIsAddExpenseOpen}
               activeCurrencies={activeCurrencies}
@@ -1138,6 +1155,27 @@ const Dashboard = () => {
               onRecordPaidExpense={handleRecordPaidExpense}
               onRemovePaidExpense={handleRemovePaidExpense}
             />
+          ) : activeMenu === 'Reports' ? (
+            <ReportsView
+              COLORS={COLORS}
+              isDarkMode={isDarkMode}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              selectedDay={selectedDay}
+              setSelectedDay={setSelectedDay}
+              years={years}
+              ALL_MONTHS={ALL_MONTHS}
+              currencies={currencies}
+              expenses={expenses}
+              incomes={incomes}
+              computedBankAccounts={computedBankAccounts}
+              balancesByCurrency={balancesByCurrency}
+              plannedBudget={plannedBudget}
+              bills={bills}
+              recurringIncomes={recurringIncomes}
+            />
           ) : activeMenu === 'Budget' ? (
             <BudgetView
               COLORS={COLORS}
@@ -1183,7 +1221,7 @@ const Dashboard = () => {
         editingTransaction={editingExpenseId ? (formType === 'income' ? incomes.find(i => i.id === editingExpenseId) : expenses.find(e => e.id === editingExpenseId)) : null}
         onSave={handleSaveExpense}
         INCOME_CATEGORIES={INCOME_CATEGORIES}
-        categories={categories}
+        categories={syncedExpenseCategories}
         setIsCategoriesManagerOpen={setIsCategoriesManagerOpen}
         handleOpenSubCategoriesManager={handleOpenSubCategoriesManager}
         currencies={currencies}
