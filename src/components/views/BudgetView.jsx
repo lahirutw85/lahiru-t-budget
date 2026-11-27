@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Folder, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar, CheckCircle2 } from 'lucide-react';
+import { Folder, Plus, X, Landmark, Trash2, ChevronDown, ChevronRight, Calendar, CheckCircle2, Wallet, TrendingUp } from 'lucide-react';
 import { formatCurrency, getTodayDateString } from '../../utils/currencyUtils';
 import {
   normalizeBudgetCategories,
@@ -114,6 +114,7 @@ export const BudgetView = ({
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
   const [editingCatId, setEditingCatId] = useState(null);
   const [catName, setCatName] = useState('');
+  const [catBudgetType, setCatBudgetType] = useState('expense'); // 'expense' | 'investing'
   const [catAmount, setCatAmount] = useState('0');
   const [catBankAccount, setCatBankAccount] = useState('');
   const [catApplyMode, setCatApplyMode] = useState('forward'); // 'forward' | 'single'
@@ -133,10 +134,15 @@ export const BudgetView = ({
   const [subLoanTotalAmount, setSubLoanTotalAmount] = useState('');
   const [subLoanTotalMonths, setSubLoanTotalMonths] = useState('');
 
-  const totalCategoryBudget = categories.reduce(
-    (sum, c) => sum + resolveCategoryTotalForPeriod(c, periodKey),
-    0
-  );
+  const totalExpensesBudget = categories
+    .filter(c => c.budgetType !== 'investing')
+    .reduce((sum, c) => sum + resolveCategoryTotalForPeriod(c, periodKey), 0);
+
+  const totalInvestingBudget = categories
+    .filter(c => c.budgetType === 'investing')
+    .reduce((sum, c) => sum + resolveCategoryTotalForPeriod(c, periodKey), 0);
+
+  const totalCategoryBudget = totalExpensesBudget + totalInvestingBudget;
 
   const persistCategories = (updatedCategories) => {
     const newExpensesTotal = updatedCategories.reduce(
@@ -157,6 +163,7 @@ export const BudgetView = ({
   const openNewCategoryModal = () => {
     setEditingCatId(null);
     setCatName('');
+    setCatBudgetType('expense');
     setCatAmount('0');
     setCatBankAccount('');
     setCatApplyMode('forward');
@@ -171,6 +178,7 @@ export const BudgetView = ({
     const hasOverride = cat.monthlyOverrides && Object.prototype.hasOwnProperty.call(cat.monthlyOverrides, periodKey);
     setEditingCatId(cat.id);
     setCatName(cat.name || '');
+    setCatBudgetType(cat.budgetType === 'investing' ? 'investing' : 'expense');
     setCatAmount(String(resolveItemAmountForPeriod(cat, periodKey)));
     setCatBankAccount(cat.bankAccount || '');
     setCatApplyMode(hasOverride ? 'single' : 'forward');
@@ -215,6 +223,7 @@ export const BudgetView = ({
         const baseUpdated = {
           ...c,
           name: trimmedName,
+          budgetType: catBudgetType,
           bankAccount: finalSubList.length > 0 ? '' : catBankAccount,
           startPeriod: catStartPeriod,
           endPeriod: catEndPeriod,
@@ -228,6 +237,7 @@ export const BudgetView = ({
       let newCat = {
         id: newId,
         name: trimmedName,
+        budgetType: catBudgetType,
         defaultAmount: 0,
         monthlyOverrides: {},
         forwardChanges: {},
@@ -464,10 +474,24 @@ export const BudgetView = ({
           <h2 className="text-lg font-bold" style={{ color: COLORS.textPrimary }}>
             Budget Categories
           </h2>
-          <p className="text-xs mt-0.5" style={{ color: COLORS.textSecondary }}>
-            Amounts carry forward every month unless changed for one month or from a future month onwards. Total for {activeMonth} {selectedYear}:{' '}
-            <span className="font-bold" style={{ color: COLORS.textPrimary }}>
-              {formatCurrency(totalCategoryBudget, currencyCode, currencies)}
+          <p className="text-xs mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: COLORS.textSecondary }}>
+            <span>
+              Expenses:{' '}
+              <span className="font-bold" style={{ color: COLORS.red }}>
+                {formatCurrency(totalExpensesBudget, currencyCode, currencies)}
+              </span>
+            </span>
+            <span>
+              Investing:{' '}
+              <span className="font-bold" style={{ color: COLORS.orange }}>
+                {formatCurrency(totalInvestingBudget, currencyCode, currencies)}
+              </span>
+            </span>
+            <span>
+              Total ({activeMonth} {selectedYear}):{' '}
+              <span className="font-bold" style={{ color: COLORS.textPrimary }}>
+                {formatCurrency(totalCategoryBudget, currencyCode, currencies)}
+              </span>
             </span>
           </p>
         </div>
@@ -499,10 +523,29 @@ export const BudgetView = ({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                      style={{
+                        backgroundColor: cat.budgetType === 'investing' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(239, 68, 68, 0.14)',
+                        color: cat.budgetType === 'investing' ? COLORS.orange : COLORS.red,
+                      }}
+                      title={cat.budgetType === 'investing' ? 'Investing Category' : 'Expense Category'}
+                    >
+                      {cat.budgetType === 'investing' ? <TrendingUp className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
+                    </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-base" style={{ color: COLORS.textPrimary }}>
                           {cat.name}
+                        </span>
+                        <span
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                          style={{
+                            backgroundColor: cat.budgetType === 'investing' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            color: cat.budgetType === 'investing' ? COLORS.orange : COLORS.red,
+                          }}
+                        >
+                          {cat.budgetType === 'investing' ? 'Investing' : 'Expense'}
                         </span>
                         {hasRange && (
                           <span
@@ -677,6 +720,40 @@ export const BudgetView = ({
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
                   style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                  Category Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCatBudgetType('expense')}
+                    className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-bold cursor-pointer transition-all"
+                    style={{
+                      backgroundColor: catBudgetType === 'expense' ? 'rgba(239, 68, 68, 0.16)' : COLORS.bgMain,
+                      borderColor: catBudgetType === 'expense' ? COLORS.red : COLORS.border,
+                      color: catBudgetType === 'expense' ? COLORS.red : COLORS.textSecondary,
+                    }}
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Expenses
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCatBudgetType('investing')}
+                    className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-bold cursor-pointer transition-all"
+                    style={{
+                      backgroundColor: catBudgetType === 'investing' ? 'rgba(245, 158, 11, 0.16)' : COLORS.bgMain,
+                      borderColor: catBudgetType === 'investing' ? COLORS.orange : COLORS.border,
+                      color: catBudgetType === 'investing' ? COLORS.orange : COLORS.textSecondary,
+                    }}
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    Investing
+                  </button>
+                </div>
               </div>
 
               {/* Sub-categories builder */}

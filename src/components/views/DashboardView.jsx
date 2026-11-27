@@ -6,7 +6,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { convertCurrency, formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
 import { buildDonutData } from '../../utils/chartUtils';
-import { normalizeBudgetCategories, resolveCategoryTotalForPeriod, resolveExpensesBudgetForSelection, DEFAULT_BILLS, getBillAmountForPeriodKey, resolveBillsTotalForSelection, resolveRecurringIncomeForSelection } from '../../utils/budgetUtils';
+import { normalizeBudgetCategories, resolveCategoryTotalForPeriod, resolveExpensesBudgetForSelection, resolveExpensesOnlyBudgetForSelection, resolveInvestingBudgetForSelection, getInvestingCategoryNames, DEFAULT_BILLS, getBillAmountForPeriodKey, resolveBillsTotalForSelection, resolveRecurringIncomeForSelection } from '../../utils/budgetUtils';
 
 export const DashboardView = ({
   COLORS,
@@ -107,7 +107,6 @@ export const DashboardView = ({
 
   // Total expenditure in default currency
   const totalExpenditure = filteredExpenses.totalInCurrency(currencyCode);
-  const formattedTotalExpenditure = formatCurrencyLocal(totalExpenditure, currencyCode);
 
   // Group by category (Income) converted to default currency
   const incomeCategoryTotals = filteredIncomes.categoryTotalsInCurrency(currencyCode);
@@ -209,7 +208,7 @@ export const DashboardView = ({
         const pk = `${selectedYear}-${String((mIdx >= 0 ? mIdx : new Date().getMonth()) + 1).padStart(2, '0')}`;
         amount = resolveCategoryTotalForPeriod(cat, pk);
       }
-      return { id: cat.id, name: cat.name, amount };
+      return { id: cat.id, name: cat.name, amount, budgetType: cat.budgetType || 'expense' };
     })
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
@@ -602,7 +601,10 @@ export const DashboardView = ({
               {topBudgetCategories.map((item, idx) => (
                 <div key={item.id || idx} className="flex justify-between items-center text-sm font-medium">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS.orange }}></div>
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: item.budgetType === 'investing' ? COLORS.orange : COLORS.red }}
+                    ></div>
                     <span className="truncate" style={{ color: COLORS.textPrimary }}>{item.name}</span>
                   </div>
                   <span className="shrink-0 font-semibold" style={{ color: COLORS.textPrimary }}>
@@ -703,12 +705,20 @@ export const DashboardView = ({
               const multiplier = selectedMonth === 'Full Year' ? 12 : 1;
               const recurringIncomeBudget = resolveRecurringIncomeForSelection(recurringIncomes, selectedYear, selectedMonth, ALL_MONTHS);
               const budgetIncome = recurringIncomeBudget > 0 ? recurringIncomeBudget : ((parseFloat(plannedBudget?.income) || 0) * multiplier);
-              const budgetExpenses = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS) + fullBillsAmount;
-              const budgetNet = budgetIncome - budgetExpenses;
+              const budgetExpenses = resolveExpensesOnlyBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS) + fullBillsAmount;
+              const budgetInvesting = resolveInvestingBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS);
+              const budgetNet = budgetIncome - budgetExpenses - budgetInvesting;
+
+              const investingNames = getInvestingCategoryNames(plannedBudget);
+              const actualInvesting = expensesArray
+                .filter(e => investingNames.has((e.category || '').toLowerCase()))
+                .reduce((sum, e) => sum + convertCurrency(parseFloat(e.amount) || 0, e.currency || 'AED', currencyCode), 0);
+              const actualExpensesOnly = Math.max(0, totalExpenditure - actualInvesting);
               const actualNet = totalIncomeValue - totalExpenditure;
 
               const incomePct = budgetIncome > 0 ? Math.round((totalIncomeValue / budgetIncome) * 100) : 0;
-              const expensePct = budgetExpenses > 0 ? Math.round((totalExpenditure / budgetExpenses) * 100) : 0;
+              const expensePct = budgetExpenses > 0 ? Math.round((actualExpensesOnly / budgetExpenses) * 100) : 0;
+              const investingPct = budgetInvesting > 0 ? Math.round((actualInvesting / budgetInvesting) * 100) : 0;
               const netPct = budgetNet > 0 ? Math.round((actualNet / budgetNet) * 100) : 0;
 
               return [
@@ -724,11 +734,20 @@ export const DashboardView = ({
                 {
                   name: 'TOTAL EXPENSES',
                   budget: formatCurrencyLocal(budgetExpenses, currencyCode),
-                  actual: formattedTotalExpenditure,
+                  actual: formatCurrencyLocal(actualExpensesOnly, currencyCode),
                   percent: Math.min(100, Math.max(0, expensePct)),
                   color: COLORS.red,
                   badge: `${expensePct}%`,
                   badgeColor: COLORS.red
+                },
+                {
+                  name: 'TOTAL INVESTING',
+                  budget: formatCurrencyLocal(budgetInvesting, currencyCode),
+                  actual: formatCurrencyLocal(actualInvesting, currencyCode),
+                  percent: Math.min(100, Math.max(0, investingPct)),
+                  color: COLORS.orange,
+                  badge: `${investingPct}%`,
+                  badgeColor: COLORS.orange
                 },
                 {
                   name: 'NET',

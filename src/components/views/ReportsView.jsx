@@ -12,6 +12,9 @@ import {
   normalizeBudgetCategories,
   resolveCategoryTotalForPeriod,
   resolveExpensesBudgetForSelection,
+  resolveExpensesOnlyBudgetForSelection,
+  resolveInvestingBudgetForSelection,
+  getInvestingCategoryNames,
   DEFAULT_BILLS,
   getBillAmountForPeriodKey,
   resolveBillsTotalForSelection,
@@ -114,6 +117,22 @@ export const ReportsView = ({
     () => periodExpenses.reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0),
     [periodExpenses, currencyCode]
   );
+  const investingNames = useMemo(() => getInvestingCategoryNames(plannedBudget), [plannedBudget]);
+  const actualInvesting = useMemo(
+    () => periodExpenses
+      .filter(e => investingNames.has((e.category || '').toLowerCase()))
+      .reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0),
+    [periodExpenses, investingNames, currencyCode]
+  );
+  const actualExpensesOnly = Math.max(0, actualExpenses - actualInvesting);
+  const plannedExpenseOnlyBudget = useMemo(
+    () => resolveExpensesOnlyBudgetForSelection(plannedBudget, selectedYear, effectiveMonth, ALL_MONTHS),
+    [plannedBudget, selectedYear, effectiveMonth, ALL_MONTHS]
+  );
+  const plannedInvestingBudget = useMemo(
+    () => resolveInvestingBudgetForSelection(plannedBudget, selectedYear, effectiveMonth, ALL_MONTHS),
+    [plannedBudget, selectedYear, effectiveMonth, ALL_MONTHS]
+  );
   const plannedCategoryBudget = useMemo(
     () => resolveExpensesBudgetForSelection(plannedBudget, selectedYear, effectiveMonth, ALL_MONTHS),
     [plannedBudget, selectedYear, effectiveMonth, ALL_MONTHS]
@@ -152,25 +171,33 @@ export const ReportsView = ({
     const mInc = incomes
       .filter(i => i.date?.startsWith(compareMonthPrefix))
       .reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0);
-    const mExp = expenses
-      .filter(e => e.date?.startsWith(compareMonthPrefix))
+    const mExpList = expenses.filter(e => e.date?.startsWith(compareMonthPrefix));
+    const mInv = mExpList
+      .filter(e => investingNames.has((e.category || '').toLowerCase()))
       .reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0);
-    const mBudget = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, compareMonthName, ALL_MONTHS)
+    const mExp = mExpList
+      .reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0);
+    const mBudget = resolveExpensesOnlyBudgetForSelection(plannedBudget, selectedYear, compareMonthName, ALL_MONTHS)
       + resolveBillsTotalForSelection(bills, selectedYear, compareMonthName, ALL_MONTHS);
-    return { income: mInc, expenses: mExp, net: mInc - mExp, budget: mBudget };
-  }, [incomes, expenses, compareMonthPrefix, currencyCode, plannedBudget, bills, selectedYear, compareMonthName, ALL_MONTHS]);
+    const mInvBudget = resolveInvestingBudgetForSelection(plannedBudget, selectedYear, compareMonthName, ALL_MONTHS);
+    return { income: mInc, expenses: Math.max(0, mExp - mInv), investing: mInv, net: mInc - mExp, budget: mBudget, invBudget: mInvBudget };
+  }, [incomes, expenses, compareMonthPrefix, currencyCode, plannedBudget, bills, selectedYear, compareMonthName, ALL_MONTHS, investingNames]);
 
   const yearlyTotals = useMemo(() => {
     const yInc = incomes
       .filter(i => i.date?.startsWith(`${selectedYear}-`))
       .reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0);
-    const yExp = expenses
-      .filter(e => e.date?.startsWith(`${selectedYear}-`))
+    const yExpList = expenses.filter(e => e.date?.startsWith(`${selectedYear}-`));
+    const yInv = yExpList
+      .filter(e => investingNames.has((e.category || '').toLowerCase()))
       .reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0);
-    const yBudget = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, 'Full Year', ALL_MONTHS)
+    const yExp = yExpList
+      .reduce((s, t) => s + convertCurrency(parseFloat(t.amount) || 0, t.currency || 'AED', currencyCode), 0);
+    const yBudget = resolveExpensesOnlyBudgetForSelection(plannedBudget, selectedYear, 'Full Year', ALL_MONTHS)
       + resolveBillsTotalForSelection(bills, selectedYear, 'Full Year', ALL_MONTHS);
-    return { income: yInc, expenses: yExp, net: yInc - yExp, budget: yBudget };
-  }, [incomes, expenses, selectedYear, currencyCode, plannedBudget, bills, ALL_MONTHS]);
+    const yInvBudget = resolveInvestingBudgetForSelection(plannedBudget, selectedYear, 'Full Year', ALL_MONTHS);
+    return { income: yInc, expenses: Math.max(0, yExp - yInv), investing: yInv, net: yInc - yExp, budget: yBudget, invBudget: yInvBudget };
+  }, [incomes, expenses, selectedYear, currencyCode, plannedBudget, bills, ALL_MONTHS, investingNames]);
 
   // ── 2. CHARTS DATA ───────────────────────────────────────
   // Chart 1: Budget vs Actual Spending by Category (Horizontal Bar)
@@ -212,7 +239,7 @@ export const ReportsView = ({
       const catLower = (e.category || '').toLowerCase();
       if (billNames.has(catLower) || (e.subCategory || '').toLowerCase() === 'bill') {
         fixedBills += amt;
-      } else if (catLower.includes('investment') || catLower.includes('emergency')) {
+      } else if (investingNames.has(catLower) || catLower.includes('investment') || catLower.includes('emergency')) {
         savingsInv += amt;
       } else if (catLower.includes('give')) {
         giving += amt;
@@ -229,7 +256,7 @@ export const ReportsView = ({
     ].filter(s => s.value > 0);
 
     return segments.length > 0 ? segments : [{ name: 'No Outgoing Yet', value: 1, color: '#1F2937' }];
-  }, [periodExpenses, bills, currencyCode, COLORS]);
+  }, [periodExpenses, bills, currencyCode, COLORS, investingNames]);
 
   // Chart 3: 12-Month Income vs Expenses & Net Trend
   const trendData = useMemo(() => {
@@ -519,12 +546,14 @@ export const ReportsView = ({
           <div className="flex justify-between items-start mb-3">
             <Wallet className="w-5 h-5" style={{ color: COLORS.red }} />
             <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-500/10" style={{ color: COLORS.red }}>
-              {totalPlannedOutgoing > 0 ? Math.round((actualExpenses / totalPlannedOutgoing) * 100) : 0}% of Plan
+              {(plannedExpenseOnlyBudget + plannedBillsTotal) > 0 ? Math.round((actualExpensesOnly / (plannedExpenseOnlyBudget + plannedBillsTotal)) * 100) : 0}% of Plan
             </span>
           </div>
-          <div className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>Total Outgoing (Expenses + Bills)</div>
-          <div className="text-2xl font-bold" style={{ color: COLORS.red }}>{formatLocal(actualExpenses)}</div>
-          <div className="text-xs mt-1" style={{ color: COLORS.textSecondary }}>Planned: {formatLocal(totalPlannedOutgoing)}</div>
+          <div className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>Expenses + Bills (Excl. Investing)</div>
+          <div className="text-2xl font-bold" style={{ color: COLORS.red }}>{formatLocal(actualExpensesOnly)}</div>
+          <div className="text-xs mt-1" style={{ color: COLORS.textSecondary }}>
+            Planned: {formatLocal(plannedExpenseOnlyBudget + plannedBillsTotal)} • Investing: <span style={{ color: COLORS.orange }}>{formatLocal(actualInvesting)} / {formatLocal(plannedInvestingBudget)}</span>
+          </div>
         </div>
 
         <div className="p-5 rounded-2xl border" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
@@ -572,11 +601,12 @@ export const ReportsView = ({
           <ArrowUpRight className="w-4 h-4" style={{ color: COLORS.skyBlue }} />
           Monthly vs. Yearly Comparison ({compareMonthName} {selectedYear} vs. Full Year {selectedYear})
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm">
           {[
             { label: 'Income', mVal: monthlyTotals.income, yVal: yearlyTotals.income, color: COLORS.green },
-            { label: 'Actual Outgoing', mVal: monthlyTotals.expenses, yVal: yearlyTotals.expenses, color: COLORS.red },
-            { label: 'Planned Budget + Bills', mVal: monthlyTotals.budget, yVal: yearlyTotals.budget, color: COLORS.orange },
+            { label: 'Actual Expenses', mVal: monthlyTotals.expenses, yVal: yearlyTotals.expenses, color: COLORS.red },
+            { label: 'Actual Investing', mVal: monthlyTotals.investing, yVal: yearlyTotals.investing, color: COLORS.orange },
+            { label: 'Planned Exp + Bills', mVal: monthlyTotals.budget, yVal: yearlyTotals.budget, color: COLORS.purple },
             { label: 'Net Balance', mVal: monthlyTotals.net, yVal: yearlyTotals.net, color: COLORS.skyBlue },
           ].map((row, idx) => {
             const sharePct = row.yVal !== 0 ? Math.round((row.mVal / row.yVal) * 100) : 0;

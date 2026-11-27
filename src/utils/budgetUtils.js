@@ -21,11 +21,12 @@ const makeSub = (id, name, defaultAmount = 0, bankAccount = '') => ({
 });
 
 export const DEFAULT_BUDGET_CATEGORIES = [
-  { id: 'cat-food', name: 'Food', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
-  { id: 'cat-ai', name: 'AI', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
+  { id: 'cat-food', name: 'Food', budgetType: 'expense', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
+  { id: 'cat-ai', name: 'AI', budgetType: 'expense', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
   {
     id: 'cat-transportation',
     name: 'Transportation',
+    budgetType: 'expense',
     defaultAmount: 0,
     monthlyOverrides: {},
     forwardChanges: {},
@@ -41,6 +42,7 @@ export const DEFAULT_BUDGET_CATEGORIES = [
   {
     id: 'cat-shopping',
     name: 'Shopping',
+    budgetType: 'expense',
     defaultAmount: 0,
     monthlyOverrides: {},
     forwardChanges: {},
@@ -55,10 +57,11 @@ export const DEFAULT_BUDGET_CATEGORIES = [
       makeSub('sub-cloth', 'Cloth'),
     ],
   },
-  { id: 'cat-emergency-fund', name: 'Emergency Fund', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
+  { id: 'cat-emergency-fund', name: 'Emergency Fund', budgetType: 'investing', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
   {
     id: 'cat-give',
     name: 'Give',
+    budgetType: 'expense',
     defaultAmount: 0,
     monthlyOverrides: {},
     forwardChanges: {},
@@ -72,11 +75,12 @@ export const DEFAULT_BUDGET_CATEGORIES = [
       makeSub('sub-naomi', 'Naomi'),
     ],
   },
-  { id: 'cat-mobile', name: 'Mobile', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
-  { id: 'cat-investment', name: 'Investment', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
+  { id: 'cat-mobile', name: 'Mobile', budgetType: 'expense', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
+  { id: 'cat-investment', name: 'Investment', budgetType: 'investing', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
   {
     id: 'cat-loan',
     name: 'Loan',
+    budgetType: 'expense',
     defaultAmount: 0,
     monthlyOverrides: {},
     forwardChanges: {},
@@ -89,7 +93,7 @@ export const DEFAULT_BUDGET_CATEGORIES = [
       makeSub('sub-dib-card', 'DIB CARD'),
     ],
   },
-  { id: 'cat-house-rent', name: 'House Rent', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
+  { id: 'cat-house-rent', name: 'House Rent', budgetType: 'expense', defaultAmount: 0, monthlyOverrides: {}, forwardChanges: {}, bankAccount: '', startPeriod: '', endPeriod: '', subCategories: [] },
 ];
 
 /**
@@ -115,8 +119,12 @@ export const normalizeBudgetCategories = (rawCategories) => {
       }
     }
 
+    const lowerName = (cat.name || '').toLowerCase();
+    const inferredType = (lowerName.includes('invest') || lowerName.includes('emergency')) ? 'investing' : 'expense';
+
     return {
       ...cat,
+      budgetType: cat.budgetType === 'investing' || cat.budgetType === 'expense' ? cat.budgetType : inferredType,
       defaultAmount: baseAmount,
       monthlyOverrides: cat.monthlyOverrides || {},
       forwardChanges: cat.forwardChanges || {},
@@ -182,10 +190,13 @@ export const resolveCategoryTotalForPeriod = (cat, periodKey) => {
 };
 
 /**
- * Computes total planned expenses for a given year + month (or 'Full Year').
+ * Computes total planned budget (filtered by type if provided: 'expense' | 'investing' | null)
+ * for a given year + month (or 'Full Year').
  */
-export const resolveExpensesBudgetForSelection = (plannedBudget, selectedYear, selectedMonth, allMonths) => {
-  const categories = normalizeBudgetCategories(plannedBudget?.categories);
+export const resolveBudgetByTypeForSelection = (plannedBudget, selectedYear, selectedMonth, allMonths, targetType = null) => {
+  const categories = normalizeBudgetCategories(plannedBudget?.categories)
+    .filter(c => !targetType || c.budgetType === targetType);
+
   if (selectedMonth === 'Full Year') {
     let yearTotal = 0;
     for (let m = 1; m <= 12; m++) {
@@ -197,6 +208,23 @@ export const resolveExpensesBudgetForSelection = (plannedBudget, selectedYear, s
   const monthIdx = allMonths.indexOf(selectedMonth);
   const pk = `${selectedYear}-${String((monthIdx >= 0 ? monthIdx : new Date().getMonth()) + 1).padStart(2, '0')}`;
   return categories.reduce((sum, cat) => sum + resolveCategoryTotalForPeriod(cat, pk), 0);
+};
+
+export const resolveExpensesBudgetForSelection = (plannedBudget, selectedYear, selectedMonth, allMonths) => {
+  return resolveBudgetByTypeForSelection(plannedBudget, selectedYear, selectedMonth, allMonths, null);
+};
+
+export const resolveExpensesOnlyBudgetForSelection = (plannedBudget, selectedYear, selectedMonth, allMonths) => {
+  return resolveBudgetByTypeForSelection(plannedBudget, selectedYear, selectedMonth, allMonths, 'expense');
+};
+
+export const resolveInvestingBudgetForSelection = (plannedBudget, selectedYear, selectedMonth, allMonths) => {
+  return resolveBudgetByTypeForSelection(plannedBudget, selectedYear, selectedMonth, allMonths, 'investing');
+};
+
+export const getInvestingCategoryNames = (plannedBudget) => {
+  const cats = normalizeBudgetCategories(plannedBudget?.categories);
+  return new Set(cats.filter(c => c.budgetType === 'investing').map(c => (c.name || '').toLowerCase()));
 };
 
 /**
