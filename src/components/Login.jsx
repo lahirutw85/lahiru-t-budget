@@ -38,6 +38,9 @@ export const Login = ({ onLoginSuccess }) => {
           const { data, error } = await supabase.auth.signUp({
             email,
             password: loginPassword,
+            options: {
+              emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+            },
           });
           if (error) {
             setLoginError(error.message);
