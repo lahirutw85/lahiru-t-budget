@@ -6,7 +6,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { convertCurrency, formatCurrency, getCurrencyRowStyle, formatExpenseDate } from '../../utils/currencyUtils';
 import { buildDonutData } from '../../utils/chartUtils';
-import { resolveExpensesBudgetForSelection } from '../../utils/budgetUtils';
+import { normalizeBudgetCategories, resolveCategoryTotalForPeriod, resolveExpensesBudgetForSelection } from '../../utils/budgetUtils';
 
 export const DashboardView = ({
   COLORS,
@@ -192,14 +192,25 @@ export const DashboardView = ({
     { name: 'No Outgoings yet', icon: Wallet, pct: 0 }
   ];
 
-  // Savings allocations
-  const savingsAllocations = Object.entries(balancesByCurrency).map(([cur, bal]) => {
-    return {
-      name: `${cur} Savings`,
-      amount: bal,
-      currency: cur
-    };
-  });
+  // Budget Allocations: full budget amount + top 5 categories for the selected period
+  const fullBudgetAmount = resolveExpensesBudgetForSelection(plannedBudget, selectedYear, selectedMonth, ALL_MONTHS);
+  const topBudgetCategories = normalizeBudgetCategories(plannedBudget?.categories)
+    .map(cat => {
+      let amount = 0;
+      if (selectedMonth === 'Full Year') {
+        for (let m = 1; m <= 12; m++) {
+          const pk = `${selectedYear}-${String(m).padStart(2, '0')}`;
+          amount += resolveCategoryTotalForPeriod(cat, pk);
+        }
+      } else {
+        const mIdx = ALL_MONTHS.indexOf(selectedMonth);
+        const pk = `${selectedYear}-${String((mIdx >= 0 ? mIdx : new Date().getMonth()) + 1).padStart(2, '0')}`;
+        amount = resolveCategoryTotalForPeriod(cat, pk);
+      }
+      return { id: cat.id, name: cat.name, amount };
+    })
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5);
 
   // ─── 4. SUB-RENDER HELPER FUNCTIONS ───────────────────────
   const renderMultiCurrencySum = (sumMap, defaultColorStyle = {}, showZero = false) => {
@@ -552,24 +563,44 @@ export const DashboardView = ({
           </div>
         </div>
 
-        {/* Savings Allocations */}
+        {/* Budget Allocations */}
         <div className="p-6 rounded-2xl border flex flex-col justify-between" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
           <div>
-            <h2 className="text-sm font-bold tracking-wider mb-6" style={{ color: COLORS.textPrimary }}>
-              SAVINGS ALLOCATIONS
-            </h2>
+            <div className="flex items-center justify-between gap-2 mb-6">
+              <h2 className="text-sm font-bold tracking-wider" style={{ color: COLORS.textPrimary }}>
+                BUDGET ALLOCATIONS
+              </h2>
+              <span className="text-xs font-bold" style={{ color: COLORS.skyBlue }}>
+                {formatCurrencyLocal(fullBudgetAmount, currencyCode)}
+              </span>
+            </div>
             <div className="space-y-4">
-              {savingsAllocations.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center text-sm font-medium">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.skyBlue }}></div>
-                    <span style={{ color: COLORS.textPrimary }}>{item.name}</span>
+              {topBudgetCategories.map((item, idx) => (
+                <div key={item.id || idx} className="flex justify-between items-center text-sm font-medium">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS.orange }}></div>
+                    <span className="truncate" style={{ color: COLORS.textPrimary }}>{item.name}</span>
                   </div>
-                  <span style={{ color: COLORS.textPrimary }}>{formatCurrencyLocal(item.amount, item.currency)}</span>
+                  <span className="shrink-0 font-semibold" style={{ color: COLORS.textPrimary }}>
+                    {formatCurrencyLocal(item.amount, currencyCode)}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
+          {onEditBudget && (
+            <div className="pt-4 mt-4 border-t flex justify-between items-center text-xs" style={{ borderColor: COLORS.border }}>
+              <span style={{ color: COLORS.textSecondary }}>Top 5 Budget Categories</span>
+              <button
+                type="button"
+                onClick={onEditBudget}
+                className="font-semibold hover:opacity-80 cursor-pointer"
+                style={{ color: COLORS.skyBlue }}
+              >
+                View All →
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
