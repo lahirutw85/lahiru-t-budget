@@ -1,4 +1,4 @@
-import { Plus, Landmark, CreditCard, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Landmark, CreditCard, Edit2, Trash2, ArrowLeftRight } from 'lucide-react';
 import { formatCurrency } from '../../utils/currencyUtils';
 
 export const AccountsView = ({
@@ -8,8 +8,11 @@ export const AccountsView = ({
   computedBankAccounts,
   currencies,
   handleEditBankAccount,
-  handleDeleteBankAccount
+  handleDeleteBankAccount,
+  onOpenTransferModal,
+  bankTransfers = [],
 }) => {
+  const transferableCount = computedBankAccounts.filter(a => a.accountType !== 'Credit Card').length;
   // Local currency formatter helper using currency definitions
   const formatCurrencyLocal = (amount, curCode) => {
     return formatCurrency(amount, curCode, currencies);
@@ -25,17 +28,29 @@ export const AccountsView = ({
             manage your bank account here.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditingBankAccountId(null);
-            setIsBankModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-opacity hover:opacity-90 cursor-pointer"
-          style={{ backgroundColor: COLORS.skyBlue, color: '#0B0F19' }}
-        >
-          <Plus className="w-4 h-4" />
-          Add New Bank Account
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {transferableCount >= 2 && (
+            <button
+              onClick={() => onOpenTransferModal('')}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition-colors hover:bg-white/10 cursor-pointer"
+              style={{ borderColor: COLORS.skyBlue, color: COLORS.skyBlue }}
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              Transfer Between Accounts
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setEditingBankAccountId(null);
+              setIsBankModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-opacity hover:opacity-90 cursor-pointer"
+            style={{ backgroundColor: COLORS.skyBlue, color: '#0B0F19' }}
+          >
+            <Plus className="w-4 h-4" />
+            Add New Bank Account
+          </button>
+        </div>
       </div>
 
       {/* Bank Accounts Grid */}
@@ -150,6 +165,17 @@ export const AccountsView = ({
 
                 {/* Card Actions */}
                 <div className="flex justify-end gap-3 mt-6 pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.03)' }}>
+                  {!isCreditCard && transferableCount >= 2 && (
+                    <button
+                      onClick={() => onOpenTransferModal(account.id)}
+                      className="p-1.5 rounded hover:bg-white/5 transition-all text-xs font-bold flex items-center gap-1 cursor-pointer mr-auto"
+                      style={{ color: COLORS.green }}
+                      title="Transfer from this account"
+                    >
+                      <ArrowLeftRight className="w-4 h-4" />
+                      <span>Transfer</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEditBankAccount(account)}
                     className="p-1.5 rounded hover:bg-white/5 transition-all text-xs font-bold flex items-center gap-1 cursor-pointer"
@@ -174,6 +200,45 @@ export const AccountsView = ({
           })
         )}
       </div>
+
+      {/* Recent Internal Transfers History */}
+      {bankTransfers.length > 0 && (
+        <div
+          className="p-6 rounded-2xl border"
+          style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <ArrowLeftRight className="w-4 h-4 text-[#4FD1F5]" />
+            <h2 className="text-base font-bold" style={{ color: COLORS.textPrimary }}>
+              Recent Internal Transfers
+            </h2>
+          </div>
+          <div className="divide-y" style={{ borderColor: COLORS.border }}>
+            {bankTransfers.slice(0, 10).map(tr => (
+              <div
+                key={tr.id}
+                className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm"
+                style={{ borderColor: COLORS.border }}
+              >
+                <div>
+                  <p className="font-semibold" style={{ color: COLORS.textPrimary }}>
+                    {tr.fromName} → {tr.toName}
+                  </p>
+                  <p className="text-xs" style={{ color: COLORS.textSecondary }}>
+                    {tr.date}{tr.notes ? ` • ${tr.notes}` : ''}
+                  </p>
+                </div>
+                <div className="font-bold" style={{ color: COLORS.skyBlue }}>
+                  {formatCurrencyLocal(tr.amount, tr.fromCurrency)}
+                  {tr.toCurrency && tr.toCurrency !== tr.fromCurrency
+                    ? ` → ${formatCurrencyLocal(tr.convertedAmount, tr.toCurrency)}`
+                    : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

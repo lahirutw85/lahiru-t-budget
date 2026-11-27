@@ -96,6 +96,7 @@ import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
 import { CategoryManagerModal } from './modals/CategoryManagerModal';
 import { ProfileModal } from './modals/ProfileModal';
+import { TransferModal } from './modals/TransferModal';
 import { Login } from './Login';
 
 
@@ -106,7 +107,7 @@ import { THEMES } from '../constants/themes';
 import { ALL_CURRENCIES } from '../constants/currencies';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
 import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings, safeJsonParse } from '../utils/dataSync';
-import { getTodayDateString, formatCurrency } from '../utils/currencyUtils';
+import { getTodayDateString, formatCurrency, convertCurrency } from '../utils/currencyUtils';
 import { supabase, hasSupabase } from '../utils/supabaseClient';
 
 
@@ -302,6 +303,8 @@ const Dashboard = () => {
   // Bank Account MODAL state — open/close + which record is being edited
   const [isBankModalOpen,      setIsBankModalOpen]      = useState(false);
   const [editingBankAccountId, setEditingBankAccountId] = useState(null);
+  const [isTransferModalOpen,  setIsTransferModalOpen]  = useState(false);
+  const [transferFromId,       setTransferFromId]       = useState('');
 
   
   // Custom user-added items for the bank modal dropdowns (Google Sheets cloud)
@@ -378,7 +381,12 @@ const Dashboard = () => {
     return parsed?.userProfile && typeof parsed.userProfile === 'object' ? parsed.userProfile : { nickname: '', avatarUrl: '' };
   });
 
-  // Persist all custom bank lists, planning budget, bills, recurring incomes, income categories, and user profile to settings in cloud
+  const [bankTransfers, setBankTransfers] = useState(() => {
+    const parsed = safeJsonParse(localStorage.getItem('budget_settings'), {});
+    return Array.isArray(parsed?.bankTransfers) ? parsed.bankTransfers : [];
+  });
+
+  // Persist all custom bank lists, planning budget, bills, recurring incomes, income categories, user profile, and transfers to settings in cloud
   useEffect(() => {
     if (!isDataLoaded) return;
     syncSettings({
@@ -390,8 +398,9 @@ const Dashboard = () => {
       recurringIncomes,
       incomeCategories: serializeIncomeCategories(incomeCategories),
       userProfile,
+      bankTransfers,
     });
-  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, recurringIncomes, incomeCategories, userProfile, isDataLoaded]);
+  }, [customBanks, customAccountTypes, customBranches, plannedBudget, bills, recurringIncomes, incomeCategories, userProfile, bankTransfers, isDataLoaded]);
 
 
 
@@ -541,6 +550,9 @@ const Dashboard = () => {
             nickname: settingsData.userProfile.nickname || '',
             avatarUrl: settingsData.userProfile.avatarUrl || '',
           });
+        }
+        if (Array.isArray(settingsData.bankTransfers)) {
+          setBankTransfers(settingsData.bankTransfers);
         }
       }
       setIsDataLoaded(true);
@@ -1214,6 +1226,63 @@ const Dashboard = () => {
     [notifications, dismissedNotifications]
   );
 
+  const handleBankTransfer = ({ fromAccountId, toAccountId, amount, date, notes }) => {
+    const fromComputed = computedBankAccounts.find(a => a.id === fromAccountId);
+    const toComputed = computedBankAccounts.find(a => a.id === toAccountId);
+    if (!fromComputed || !toComputed) {
+      throw new Error('Selected bank accounts could not be found.');
+    }
+    const available = Number(fromComputed.balance) || 0;
+    if (available <= 0 || amount > available) {
+      throw new Error(
+        `Insufficient funds in ${fromComputed.bankName}: available balance is ${formatCurrency(available, fromComputed.currency, currencies)}.`
+      );
+    }
+
+    const convertedAmount =
+      fromComputed.currency === toComputed.currency
+        ? amount
+        : convertCurrency(amount, fromComputed.currency, toComputed.currency, currencies);
+
+    const updatedAccounts = bankAccounts.map(acc => {
+      if (acc.id === fromAccountId) {
+        const balances = Array.isArray(acc.balances) && acc.balances.length > 0
+          ? [...acc.balances]
+          : [parseFloat(acc.balance) || 0];
+        balances[0] = (parseFloat(balances[0]) || 0) - amount;
+        const total = balances.reduce((s, v) => s + (parseFloat(v) || 0), 0);
+        return { ...acc, balances, balance: total };
+      }
+      if (acc.id === toAccountId) {
+        const balances = Array.isArray(acc.balances) && acc.balances.length > 0
+          ? [...acc.balances]
+          : [parseFloat(acc.balance) || 0];
+        balances[0] = (parseFloat(balances[0]) || 0) + convertedAmount;
+        const total = balances.reduce((s, v) => s + (parseFloat(v) || 0), 0);
+        return { ...acc, balances, balance: total };
+      }
+      return acc;
+    });
+
+    setBankAccounts(updatedAccounts);
+    setBankTransfers(prev => [
+      {
+        id: Date.now().toString(),
+        fromAccountId,
+        toAccountId,
+        fromName: `${fromComputed.bankName} (${fromComputed.accountType})`,
+        toName: `${toComputed.bankName} (${toComputed.accountType})`,
+        amount,
+        convertedAmount,
+        fromCurrency: fromComputed.currency,
+        toCurrency: toComputed.currency,
+        date,
+        notes,
+      },
+      ...prev,
+    ]);
+  };
+
   if (!isLoggedIn) {
     return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
@@ -1553,6 +1622,11 @@ const Dashboard = () => {
               currencies={currencies}
               handleEditBankAccount={handleEditBankAccount}
               handleDeleteBankAccount={handleDeleteBankAccount}
+              onOpenTransferModal={(fromId) => {
+                setTransferFromId(fromId || '');
+                setIsTransferModalOpen(true);
+              }}
+              bankTransfers={bankTransfers}
             />
           ) : activeMenu === 'Bills' ? (
             <BillsView
@@ -1731,6 +1805,17 @@ const Dashboard = () => {
         userProfile={userProfile}
         setUserProfile={setUserProfile}
         defaultAvatar={userProfileImg}
+      />
+
+      <TransferModal
+        key={`${isTransferModalOpen}-${transferFromId || 'any'}`}
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        COLORS={COLORS}
+        computedBankAccounts={computedBankAccounts}
+        currencies={currencies}
+        initialFromAccountId={transferFromId}
+        onTransfer={handleBankTransfer}
       />
     </div>
   );
