@@ -369,6 +369,13 @@ export const DashboardView = ({
             </select>
             <ChevronDown className="w-4 h-4 -ml-4 pointer-events-none" style={{ color: COLORS.textSecondary }}/>
           </div>
+          <div
+            className="flex items-center px-4 py-2 rounded-lg border text-sm font-medium"
+            style={{ borderColor: COLORS.border, backgroundColor: COLORS.bgCard, color: COLORS.textPrimary }}
+            title="Current Day"
+          >
+            {new Date().getDate()}
+          </div>
           <button 
             onClick={handleAddYear}
             className="w-10 h-10 rounded-lg flex items-center justify-center transition-opacity hover:opacity-80 cursor-pointer" 
