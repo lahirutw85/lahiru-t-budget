@@ -26,7 +26,9 @@ export const DashboardView = ({
   currencies,
   categories,
   INCOME_CATEGORIES,
-  isDarkMode
+  isDarkMode,
+  plannedBudget = { income: 0, expenses: 0 },
+  onEditBudget
 }) => {
   // Local array conversion for mapping and array iteration
   const expensesArray = filteredExpenses.toArray();
@@ -560,40 +562,63 @@ export const DashboardView = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Comparison */}
         <div className="p-6 rounded-2xl border" style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}>
-          <h2 className="text-lg font-bold flex items-center gap-2 mb-8" style={{ color: COLORS.textPrimary }}>
-            <TrendingUp className="w-5 h-5" style={{ color: COLORS.skyBlue }}/>
-            Monthly Comparison
-          </h2>
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-lg font-bold flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
+              <TrendingUp className="w-5 h-5" style={{ color: COLORS.skyBlue }}/>
+              Monthly Comparison
+            </h2>
+            {onEditBudget && (
+              <button
+                onClick={onEditBudget}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-opacity hover:opacity-80 cursor-pointer"
+                style={{ borderColor: COLORS.border, color: COLORS.skyBlue, backgroundColor: COLORS.activeBg }}
+              >
+                Edit Plan
+              </button>
+            )}
+          </div>
           <div className="space-y-6">
-            {[
-              { 
-                name: 'TOTAL INCOME', 
-                budget: formatCurrencyLocal(28500, currencyCode), 
-                actual: formattedTotalIncomeValue, 
-                percent: Math.min(100, Math.round((totalIncomeValue / 28500) * 100)),
-                color: COLORS.green,
-                badge: `${Math.round((totalIncomeValue / 28500) * 100)}%`,
-                badgeColor: COLORS.green
-              },
-              { 
-                name: 'TOTAL EXPENSES', 
-                budget: formatCurrencyLocal(10000, currencyCode), 
-                actual: formattedTotalExpenditure, 
-                percent: Math.min(100, Math.round((totalExpenditure / 10000) * 100)),
-                color: COLORS.red,
-                badge: `${Math.round((totalExpenditure / 10000) * 100)}%`,
-                badgeColor: COLORS.red
-              },
-              { 
-                name: 'NET', 
-                budget: formatCurrencyLocal(18500, currencyCode), 
-                actual: formatCurrencyLocal(totalIncomeValue - totalExpenditure, currencyCode), 
-                percent: Math.min(100, Math.max(0, Math.round(((totalIncomeValue - totalExpenditure) / 18500) * 100))),
-                color: (totalIncomeValue - totalExpenditure) >= 0 ? COLORS.skyBlue : COLORS.red,
-                badge: `${Math.round(((totalIncomeValue - totalExpenditure) / 18500) * 100)}%`,
-                badgeColor: (totalIncomeValue - totalExpenditure) >= 0 ? COLORS.green : COLORS.red
-              }
-            ].map((item, idx) => (
+            {(() => {
+              const multiplier = selectedMonth === 'Full Year' ? 12 : 1;
+              const budgetIncome = (parseFloat(plannedBudget?.income) || 0) * multiplier;
+              const budgetExpenses = (parseFloat(plannedBudget?.expenses) || 0) * multiplier;
+              const budgetNet = budgetIncome - budgetExpenses;
+              const actualNet = totalIncomeValue - totalExpenditure;
+
+              const incomePct = budgetIncome > 0 ? Math.round((totalIncomeValue / budgetIncome) * 100) : 0;
+              const expensePct = budgetExpenses > 0 ? Math.round((totalExpenditure / budgetExpenses) * 100) : 0;
+              const netPct = budgetNet > 0 ? Math.round((actualNet / budgetNet) * 100) : 0;
+
+              return [
+                {
+                  name: 'TOTAL INCOME',
+                  budget: formatCurrencyLocal(budgetIncome, currencyCode),
+                  actual: formattedTotalIncomeValue,
+                  percent: Math.min(100, Math.max(0, incomePct)),
+                  color: COLORS.green,
+                  badge: `${incomePct}%`,
+                  badgeColor: COLORS.green
+                },
+                {
+                  name: 'TOTAL EXPENSES',
+                  budget: formatCurrencyLocal(budgetExpenses, currencyCode),
+                  actual: formattedTotalExpenditure,
+                  percent: Math.min(100, Math.max(0, expensePct)),
+                  color: COLORS.red,
+                  badge: `${expensePct}%`,
+                  badgeColor: COLORS.red
+                },
+                {
+                  name: 'NET',
+                  budget: formatCurrencyLocal(budgetNet, currencyCode),
+                  actual: formatCurrencyLocal(actualNet, currencyCode),
+                  percent: Math.min(100, Math.max(0, netPct)),
+                  color: actualNet >= 0 ? COLORS.skyBlue : COLORS.red,
+                  badge: `${netPct}%`,
+                  badgeColor: actualNet >= 0 ? COLORS.green : COLORS.red
+                }
+              ];
+            })().map((item, idx) => (
               <div key={idx}>
                 <div className="flex justify-between text-xs font-bold mb-2">
                   <span style={{ color: COLORS.textPrimary }}>{item.name}</span>

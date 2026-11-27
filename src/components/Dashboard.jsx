@@ -78,6 +78,7 @@ import { DashboardView } from './views/DashboardView';
 import { ExpensesView } from './views/ExpensesView';
 import { IncomeView } from './views/IncomeView';
 import { AccountsView } from './views/AccountsView';
+import { BudgetView } from './views/BudgetView';
 import { TransactionModal } from './modals/TransactionModal';
 import { BankModal } from './modals/BankModal';
 import { CurrencyManagerModal } from './modals/CurrencyManagerModal';
@@ -284,15 +285,22 @@ const Dashboard = () => {
     return cached ? JSON.parse(cached) : [];
   });
 
-  // Persist all custom bank lists to settings sheet in cloud
+  const [plannedBudget, setPlannedBudget] = useState(() => {
+    const cached = localStorage.getItem('budget_settings');
+    const parsed = cached ? JSON.parse(cached) : {};
+    return parsed?.plannedBudget || { income: 0, expenses: 0 };
+  });
+
+  // Persist all custom bank lists and planning budget to settings sheet in cloud
   useEffect(() => {
     if (!isDataLoaded) return;
     syncSettings({
       customBanks,
       customAccountTypes,
-      customBranches
+      customBranches,
+      plannedBudget
     });
-  }, [customBanks, customAccountTypes, customBranches, isDataLoaded]);
+  }, [customBanks, customAccountTypes, customBranches, plannedBudget, isDataLoaded]);
 
 
 
@@ -388,6 +396,12 @@ const Dashboard = () => {
         if (Array.isArray(settingsData.customBanks)) setCustomBanks(settingsData.customBanks);
         if (Array.isArray(settingsData.customAccountTypes)) setCustomAccountTypes(settingsData.customAccountTypes);
         if (Array.isArray(settingsData.customBranches)) setCustomBranches(settingsData.customBranches);
+        if (settingsData.plannedBudget && typeof settingsData.plannedBudget === 'object') {
+          setPlannedBudget({
+            income: parseFloat(settingsData.plannedBudget.income) || 0,
+            expenses: parseFloat(settingsData.plannedBudget.expenses) || 0,
+          });
+        }
       }
       setIsDataLoaded(true);
     };
@@ -943,6 +957,8 @@ const Dashboard = () => {
               categories={categories}
               INCOME_CATEGORIES={INCOME_CATEGORIES}
               isDarkMode={isDarkMode}
+              plannedBudget={plannedBudget}
+              onEditBudget={() => setActiveMenu('Budget')}
             />
           ) : activeMenu === 'Expenses' ? (
             <ExpensesView
@@ -993,6 +1009,17 @@ const Dashboard = () => {
               currencies={currencies}
               handleEditBankAccount={handleEditBankAccount}
               handleDeleteBankAccount={handleDeleteBankAccount}
+            />
+          ) : activeMenu === 'Budget' ? (
+            <BudgetView
+              COLORS={COLORS}
+              plannedBudget={plannedBudget}
+              setPlannedBudget={setPlannedBudget}
+              currencies={currencies}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              dashboardFilteredIncomes={dashboardFilteredIncomes}
+              dashboardFilteredExpenses={dashboardFilteredExpenses}
             />
           ) : (
             <div className="max-w-7xl mx-auto text-left">
