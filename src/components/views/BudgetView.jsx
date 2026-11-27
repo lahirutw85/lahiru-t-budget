@@ -528,7 +528,7 @@ export const BudgetView = ({
                   </div>
 
                   <div className="flex items-center gap-2.5 shrink-0">
-                    {!hasSubs && catTotal > 0 && (
+                    {catTotal > 0 && (
                       <button
                         type="button"
                         onClick={(e) => handleTogglePaidCategory(e, cat)}
