@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Calendar, ChevronDown, Plus, X, Landmark, Trash2, Repeat, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, getTodayDateString } from '../../utils/currencyUtils';
-import { DEFAULT_BILLS, getBillAmountForPeriodKey } from '../../utils/budgetUtils';
+import { DEFAULT_BILLS, getBillAmountForPeriodKey, formatPeriodLabel } from '../../utils/budgetUtils';
 
 /**
  * BillsView
@@ -102,6 +102,7 @@ export const BillsView = ({
   const [billAmount, setBillAmount] = useState('0');
   const [billBankAccount, setBillBankAccount] = useState('');
   const [billDueDay, setBillDueDay] = useState('');
+  const [billStartPeriod, setBillStartPeriod] = useState('');
   const [onlyThisMonth, setOnlyThisMonth] = useState(false);
 
   const totalBillsForMonth = billsList.reduce((sum, b) => sum + getBillAmountForPeriod(b), 0);
@@ -112,6 +113,7 @@ export const BillsView = ({
     setBillAmount('0');
     setBillBankAccount('');
     setBillDueDay('');
+    setBillStartPeriod(periodKey);
     setOnlyThisMonth(false);
     setIsModalOpen(true);
   };
@@ -123,6 +125,7 @@ export const BillsView = ({
     setBillAmount(String(getBillAmountForPeriod(bill)));
     setBillBankAccount(bill.bankAccount || '');
     setBillDueDay(bill.dueDay ? String(bill.dueDay) : '');
+    setBillStartPeriod(bill.startPeriod || '');
     setOnlyThisMonth(Boolean(hasOverride));
     setIsModalOpen(true);
   };
@@ -157,6 +160,7 @@ export const BillsView = ({
           monthlyOverrides: nextOverrides,
           bankAccount: billBankAccount,
           dueDay: billDueDay.trim(),
+          startPeriod: billStartPeriod,
         };
       });
     } else {
@@ -167,8 +171,10 @@ export const BillsView = ({
           name: trimmedName,
           defaultAmount: numericAmount,
           monthlyOverrides: {},
+          paidMonths: {},
           bankAccount: billBankAccount,
           dueDay: billDueDay.trim(),
+          startPeriod: billStartPeriod,
         },
       ];
     }
@@ -289,6 +295,14 @@ export const BillsView = ({
                         Due Day {bill.dueDay}
                       </span>
                     )}
+                    {bill.startPeriod && (
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider"
+                        style={{ backgroundColor: 'rgba(56, 189, 248, 0.12)', color: COLORS.skyBlue }}
+                      >
+                        From {formatPeriodLabel(bill.startPeriod)}
+                      </span>
+                    )}
                   </div>
 
                   {bill.bankAccount && (
@@ -396,6 +410,19 @@ export const BillsView = ({
                     style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: COLORS.textSecondary }}>
+                  Starting Month &amp; Year (Optional)
+                </label>
+                <input
+                  type="month"
+                  value={billStartPeriod}
+                  onChange={(e) => setBillStartPeriod(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
+                  style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border, color: COLORS.textPrimary }}
+                />
               </div>
 
               {editingBillId && (

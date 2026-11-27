@@ -211,12 +211,13 @@ export const formatPeriodLabel = (periodKey) => {
 };
 
 export const DEFAULT_BILLS = [
-  { id: 'bill-mobile', name: 'Mobile', defaultAmount: 0, monthlyOverrides: {}, paidMonths: {}, bankAccount: '', dueDay: '' },
-  { id: 'bill-house-rent', name: 'House Rent', defaultAmount: 0, monthlyOverrides: {}, paidMonths: {}, bankAccount: '', dueDay: '' },
+  { id: 'bill-mobile', name: 'Mobile', defaultAmount: 0, monthlyOverrides: {}, paidMonths: {}, bankAccount: '', dueDay: '', startPeriod: '' },
+  { id: 'bill-house-rent', name: 'House Rent', defaultAmount: 0, monthlyOverrides: {}, paidMonths: {}, bankAccount: '', dueDay: '', startPeriod: '' },
 ];
 
 export const getBillAmountForPeriodKey = (bill, periodKey) => {
   if (!bill) return 0;
+  if (bill.startPeriod && periodKey < bill.startPeriod) return 0;
   if (bill.monthlyOverrides && Object.prototype.hasOwnProperty.call(bill.monthlyOverrides, periodKey)) {
     return parseFloat(bill.monthlyOverrides[periodKey]) || 0;
   }
