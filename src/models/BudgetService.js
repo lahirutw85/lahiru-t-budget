@@ -12,6 +12,7 @@ import { BankAccount } from './BankAccount';
 import { TransactionCollection } from './TransactionCollection';
 import { BankAccountCollection } from './BankAccountCollection';
 import { syncExpenses, syncIncomes, syncBankAccounts } from '../utils/dataSync';
+import { getTodayDateString } from '../utils/currencyUtils';
 
 export class BudgetService {
   /**
@@ -52,36 +53,46 @@ export class BudgetService {
 
   /**
    * getComputedBankAccounts
-   * Evaluates all transaction logs against bank accounts to calculate current
-   * real-time dynamic balances and credit remaining limits.
+   * Evaluates transaction logs up to the given date (defaults to today)
+   * against bank accounts to calculate current real-time dynamic balances
+   * and credit remaining limits.
+   * @param {string} asOfDate - Local YYYY-MM-DD cutoff date
    * @returns {Array<BankAccount>} List of computed BankAccount instances
    */
-  getComputedBankAccounts() {
+  getComputedBankAccounts(asOfDate = getTodayDateString()) {
+    const realizedIncomes = this.incomesCollection.filterUpToDate(asOfDate);
+    const realizedExpenses = this.expensesCollection.filterUpToDate(asOfDate);
     return this.bankAccountsCollection
-      .computeBalances(this.incomesCollection, this.expensesCollection)
+      .computeBalances(realizedIncomes, realizedExpenses)
       .toArray();
   }
 
   /**
    * sumBalancesByCurrency
-   * Group all computed bank account balances by currency (excluding credit cards).
+   * Group all computed bank account balances up to asOfDate by currency (excluding credit cards).
+   * @param {string} asOfDate - Local YYYY-MM-DD cutoff date
    * @returns {Object} Key-value pair of currency code to total balance (e.g. { LKR: 25000, AED: 4500 })
    */
-  sumBalancesByCurrency() {
+  sumBalancesByCurrency(asOfDate = getTodayDateString()) {
+    const realizedIncomes = this.incomesCollection.filterUpToDate(asOfDate);
+    const realizedExpenses = this.expensesCollection.filterUpToDate(asOfDate);
     return this.bankAccountsCollection
-      .computeBalances(this.incomesCollection, this.expensesCollection)
+      .computeBalances(realizedIncomes, realizedExpenses)
       .sumBalancesByCurrency();
   }
 
   /**
    * sumBalancesDefaultCurrency
-   * Converts and sums all computed bank balances into a single default currency.
+   * Converts and sums all computed bank balances up to asOfDate into a single default currency.
    * @param {string} defaultCurrency - The target default currency code (e.g., 'LKR')
+   * @param {string} asOfDate - Local YYYY-MM-DD cutoff date
    * @returns {number} Sum total in default currency
    */
-  sumBalancesDefaultCurrency(defaultCurrency) {
+  sumBalancesDefaultCurrency(defaultCurrency, asOfDate = getTodayDateString()) {
+    const realizedIncomes = this.incomesCollection.filterUpToDate(asOfDate);
+    const realizedExpenses = this.expensesCollection.filterUpToDate(asOfDate);
     return this.bankAccountsCollection
-      .computeBalances(this.incomesCollection, this.expensesCollection)
+      .computeBalances(realizedIncomes, realizedExpenses)
       .sumBalancesDefaultCurrency(defaultCurrency);
   }
 

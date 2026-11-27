@@ -92,6 +92,7 @@ import { THEMES } from '../constants/themes';
 import { ALL_CURRENCIES } from '../constants/currencies';
 import { INCOME_CATEGORIES, AVAILABLE_ICONS, ALL_MONTHS } from '../constants/categories';
 import { fetchExpenses, fetchIncomes, fetchBankAccounts, fetchCurrencies, fetchSettings, syncExpenses, syncIncomes, syncBankAccounts, syncCurrencies, syncSettings } from '../utils/dataSync';
+import { getTodayDateString } from '../utils/currencyUtils';
 
 
 
@@ -725,10 +726,18 @@ const Dashboard = () => {
     || { code: 'AED', symbol: 'AED' };
   const currencyCode   = defaultCurrencyObj.code;
 
+  const todayStr = getTodayDateString();
+
   const expensesSumByCurrency = filteredExpenses.sumByCurrency();
   const incomesSumByCurrency  = filteredIncomes.sumByCurrency();
-  const computedBankAccounts = budgetService.getComputedBankAccounts();
-  const bankBalancesSumByCurrency = budgetService.sumBalancesByCurrency();
+  const computedBankAccounts = budgetService.getComputedBankAccounts(todayStr);
+  const bankBalancesSumByCurrency = budgetService.sumBalancesByCurrency(todayStr);
+
+  // Dashboard only counts transactions realized up to today (day-to-day)
+  const dashboardFilteredExpenses = filteredExpenses.filterUpToDate(todayStr);
+  const dashboardFilteredIncomes  = filteredIncomes.filterUpToDate(todayStr);
+  const dashboardPrevExpenses     = prevExpenses.filterUpToDate(todayStr);
+  const dashboardPrevIncomes      = prevIncomes.filterUpToDate(todayStr);
 
   // All currencies that have at least one non-zero transaction in the current period OR have a non-zero bank balance
   const activeCurrenciesForPeriod = Array.from(new Set([
@@ -746,10 +755,12 @@ const Dashboard = () => {
     ? activeCurrenciesForPeriod
     : [currencyCode];
 
-  const cashIncomesSumByCurrency = budgetService.incomesCollection.filterCash().sumByCurrency();
-  const cashExpensesSumByCurrency = budgetService.expensesCollection.filterCash().sumByCurrency();
+  const realizedIncomesCollection = budgetService.incomesCollection.filterUpToDate(todayStr);
+  const realizedExpensesCollection = budgetService.expensesCollection.filterUpToDate(todayStr);
+  const cashIncomesSumByCurrency = realizedIncomesCollection.filterCash().sumByCurrency();
+  const cashExpensesSumByCurrency = realizedExpensesCollection.filterCash().sumByCurrency();
 
-  // Calculate balances by currency: cash balance (all-time cash income - all-time cash expense) + bank details account balances
+  // Calculate balances by currency: cash balance (all-time up to today cash income - cash expense) + bank details account balances (up to today)
   const balancesByCurrency = activeCurrencies.reduce((acc, cur) => {
     const cashInc = cashIncomesSumByCurrency[cur] || 0;
     const cashExp = cashExpensesSumByCurrency[cur] || 0;
@@ -758,7 +769,7 @@ const Dashboard = () => {
     return acc;
   }, {});
 
-  const bankBalancesSumDefault = budgetService.sumBalancesDefaultCurrency(currencyCode);
+  const bankBalancesSumDefault = budgetService.sumBalancesDefaultCurrency(currencyCode, todayStr);
 
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard, color: COLORS.skyBlue },
@@ -921,10 +932,10 @@ const Dashboard = () => {
               handleAddYear={handleAddYear}
               handleDeleteYear={handleDeleteYear}
               ALL_MONTHS={ALL_MONTHS}
-              filteredExpenses={filteredExpenses}
-              filteredIncomes={filteredIncomes}
-              prevExpenses={prevExpenses}
-              prevIncomes={prevIncomes}
+              filteredExpenses={dashboardFilteredExpenses}
+              filteredIncomes={dashboardFilteredIncomes}
+              prevExpenses={dashboardPrevExpenses}
+              prevIncomes={dashboardPrevIncomes}
               bankBalancesSumDefault={bankBalancesSumDefault}
               balancesByCurrency={balancesByCurrency}
               activeCurrencies={activeCurrencies}

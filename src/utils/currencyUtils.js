@@ -113,3 +113,20 @@ export const formatExpenseDate = (dateStr) => {
   ];
   return `${MONTHS[monthIdx]} ${day}, ${year}`;
 };
+
+/**
+ * getTodayDateString
+ * ──────────────────────────────────────────────────────────
+ * Returns today's local calendar date in ISO format (YYYY-MM-DD).
+ * Uses local year/month/day rather than UTC so day-to-day cutoffs
+ * match the user's local timezone.
+ *
+ * @returns {string} - e.g. '2026-11-27'
+ */
+export const getTodayDateString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};

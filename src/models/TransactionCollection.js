@@ -6,6 +6,7 @@
 // ================================================================
 
 import { Transaction } from './Transaction';
+import { getTodayDateString } from '../utils/currencyUtils';
 
 export class TransactionCollection {
   /**
@@ -98,6 +99,20 @@ export class TransactionCollection {
     const filtered = this.items.filter(tx => {
       const accType = tx.account || 'Cash';
       return accType !== 'Bank Account' && accType !== 'Credit Card';
+    });
+    return new TransactionCollection(filtered);
+  }
+
+  /**
+   * Returns a new TransactionCollection containing only transactions dated
+   * on or before the given YYYY-MM-DD cutoff date (defaults to today).
+   * @param {string} cutoffDate - Local date string in YYYY-MM-DD format
+   * @returns {TransactionCollection}
+   */
+  filterUpToDate(cutoffDate = getTodayDateString()) {
+    const filtered = this.items.filter(tx => {
+      if (!tx.date) return false;
+      return tx.date <= cutoffDate;
     });
     return new TransactionCollection(filtered);
   }
