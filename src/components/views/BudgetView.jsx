@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Folder, TrendingUp, CircleDollarSign, Wallet, CheckCircle2, Plus, X, Landmark, Trash2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Folder, TrendingUp, Plus, X, Landmark, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../../utils/currencyUtils';
 
 export const DEFAULT_BUDGET_CATEGORIES = [
@@ -67,10 +67,6 @@ export const BudgetView = ({
     return options;
   }, [computedBankAccounts]);
 
-  const [incomeInput, setIncomeInput] = useState(String(plannedBudget?.income ?? 0));
-  const [expenseInput, setExpenseInput] = useState(String(plannedBudget?.expenses ?? 0));
-  const [savedBanner, setSavedBanner] = useState(false);
-
   // Modal state for adding or editing (on double-click) a budget category
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
   const [editingCatId, setEditingCatId] = useState(null);
@@ -79,32 +75,11 @@ export const BudgetView = ({
   const [catAmount, setCatAmount] = useState('0');
   const [catBankAccount, setCatBankAccount] = useState('');
 
-  useEffect(() => {
-    setIncomeInput(String(plannedBudget?.income ?? 0));
-    setExpenseInput(String(plannedBudget?.expenses ?? 0));
-  }, [plannedBudget]);
-
-  const parsedIncome = Math.max(0, parseFloat(incomeInput) || 0);
-  const parsedExpenses = Math.max(0, parseFloat(expenseInput) || 0);
-  const plannedNet = parsedIncome - parsedExpenses;
-
   const totalCategoryBudget = categories.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
 
   const actualIncome = dashboardFilteredIncomes.totalInCurrency(currencyCode);
   const actualExpenses = dashboardFilteredExpenses.totalInCurrency(currencyCode);
   const actualNet = actualIncome - actualExpenses;
-
-  const handleSavePlan = (e) => {
-    e.preventDefault();
-    setPlannedBudget({
-      ...plannedBudget,
-      income: parsedIncome,
-      expenses: parsedExpenses,
-      categories,
-    });
-    setSavedBanner(true);
-    setTimeout(() => setSavedBanner(false), 2500);
-  };
 
   const openNewCategoryModal = () => {
     setEditingCatId(null);
@@ -154,10 +129,8 @@ export const BudgetView = ({
     }
 
     const newExpensesTotal = updatedCategories.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
-    setExpenseInput(String(newExpensesTotal));
     setPlannedBudget({
       ...plannedBudget,
-      income: parsedIncome,
       expenses: newExpensesTotal,
       categories: updatedCategories,
     });
@@ -167,10 +140,8 @@ export const BudgetView = ({
   const handleDeleteCategory = (id) => {
     const updatedCategories = categories.filter(c => c.id !== id);
     const newExpensesTotal = updatedCategories.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
-    setExpenseInput(String(newExpensesTotal));
     setPlannedBudget({
       ...plannedBudget,
-      income: parsedIncome,
       expenses: newExpensesTotal,
       categories: updatedCategories,
     });
@@ -187,99 +158,10 @@ export const BudgetView = ({
             Planning Budget
           </h1>
           <p className="text-sm mt-1" style={{ color: COLORS.textSecondary }}>
-            Set your planned monthly targets and category allocations in <span style={{ color: COLORS.textPrimary }}>{currencyCode}</span>.
+            Set your planned monthly category allocations in <span style={{ color: COLORS.textPrimary }}>{currencyCode}</span>.
           </p>
         </div>
       </div>
-
-      {/* Form Card */}
-      <form
-        onSubmit={handleSavePlan}
-        className="p-6 lg:p-8 rounded-2xl border space-y-6"
-        style={{ backgroundColor: COLORS.bgCard, borderColor: COLORS.border }}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Planned Monthly Income */}
-          <div>
-            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.green }}>
-              <CircleDollarSign className="w-4 h-4" />
-              Planned Monthly Income ({currencyCode})
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={incomeInput}
-              onChange={(e) => setIncomeInput(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-4 py-3 rounded-xl border text-base font-bold focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
-              style={{
-                backgroundColor: COLORS.bgMain,
-                borderColor: COLORS.border,
-                color: COLORS.textPrimary,
-              }}
-            />
-          </div>
-
-          {/* Planned Monthly Expenses */}
-          <div>
-            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.red }}>
-              <Wallet className="w-4 h-4" />
-              Planned Monthly Expenses ({currencyCode})
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={expenseInput}
-              onChange={(e) => setExpenseInput(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-4 py-3 rounded-xl border text-base font-bold focus:outline-none focus:ring-2 focus:ring-[#4FD1F5]"
-              style={{
-                backgroundColor: COLORS.bgMain,
-                borderColor: COLORS.border,
-                color: COLORS.textPrimary,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Planned Net Summary */}
-        <div
-          className="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-          style={{ backgroundColor: COLORS.bgMain, borderColor: COLORS.border }}
-        >
-          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: COLORS.textSecondary }}>
-            Planned Monthly Net Savings
-          </span>
-          <span
-            className="text-xl font-bold"
-            style={{ color: plannedNet >= 0 ? COLORS.skyBlue : COLORS.red }}
-          >
-            {formatCurrency(plannedNet, currencyCode, currencies)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 pt-2">
-          {savedBanner ? (
-            <span className="flex items-center gap-2 text-sm font-semibold" style={{ color: COLORS.green }}>
-              <CheckCircle2 className="w-4 h-4" />
-              Planning budget saved!
-            </span>
-          ) : (
-            <span className="text-xs" style={{ color: COLORS.textSecondary }}>
-              For Full Year view on Dashboard, monthly targets are multiplied by 12.
-            </span>
-          )}
-          <button
-            type="submit"
-            className="px-6 py-2.5 rounded-xl text-sm font-bold transition-opacity hover:opacity-90 cursor-pointer shrink-0"
-            style={{ backgroundColor: COLORS.skyBlue, color: '#0B0F19' }}
-          >
-            Save Budget Plan
-          </button>
-        </div>
-      </form>
 
       {/* Budget Categories List */}
       <div
