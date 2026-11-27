@@ -16,11 +16,9 @@ const sha256Hex = async (text) => {
 
 export const Login = ({ onLoginSuccess }) => {
   const useSupabaseAuth = hasSupabase();
-  const [isSignUp, setIsSignUp] = useState(false);
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [infoMessage, setInfoMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const COLORS = THEMES.dark;
@@ -28,38 +26,18 @@ export const Login = ({ onLoginSuccess }) => {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoginError('');
-    setInfoMessage('');
 
     if (useSupabaseAuth && supabase) {
       setIsSubmitting(true);
       try {
-        const email = loginIdentifier.trim();
-        if (isSignUp) {
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password: loginPassword,
-            options: {
-              emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
-            },
-          });
-          if (error) {
-            setLoginError(error.message);
-          } else if (data?.session) {
-            onLoginSuccess();
-          } else {
-            setInfoMessage('Account created! Please check your email to confirm, then sign in.');
-            setIsSignUp(false);
-          }
+        const { error } = await supabase.auth.signInWithPassword({
+          email: loginIdentifier.trim(),
+          password: loginPassword,
+        });
+        if (error) {
+          setLoginError(error.message);
         } else {
-          const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password: loginPassword,
-          });
-          if (error) {
-            setLoginError(error.message);
-          } else {
-            onLoginSuccess();
-          }
+          onLoginSuccess();
         }
       } catch (err) {
         setLoginError(err.message || 'Authentication failed');
@@ -121,19 +99,6 @@ export const Login = ({ onLoginSuccess }) => {
             </div>
           )}
 
-          {infoMessage && (
-            <div 
-              className="p-4 rounded-xl text-sm font-medium border flex items-center gap-3"
-              style={{ 
-                backgroundColor: 'rgba(79, 209, 245, 0.1)', 
-                borderColor: 'rgba(79, 209, 245, 0.2)', 
-                color: '#7DD3FC' 
-              }}
-            >
-              {infoMessage}
-            </div>
-          )}
-
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.textSecondary }}>
               {useSupabaseAuth ? 'Email' : 'Username'}
@@ -191,26 +156,8 @@ export const Login = ({ onLoginSuccess }) => {
               background: 'linear-gradient(135deg, #4FD1F5 0%, #38BDF8 100%)'
             }}
           >
-            {isSubmitting
-              ? (isSignUp ? 'Creating Account...' : 'Signing In...')
-              : (isSignUp ? 'Create Account' : 'Sign In')}
+            {isSubmitting ? 'Signing In...' : 'Sign In'}
           </button>
-
-          {useSupabaseAuth && (
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSignUp(prev => !prev);
-                  setLoginError('');
-                  setInfoMessage('');
-                }}
-                className="text-xs font-medium text-[#4FD1F5] hover:underline cursor-pointer"
-              >
-                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Create one"}
-              </button>
-            </div>
-          )}
         </form>
         
         <div className="mt-8 pt-6 border-t text-center text-xs" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
